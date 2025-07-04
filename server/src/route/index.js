@@ -1,5 +1,5 @@
 import express from 'express';
-import {creatorRouter} from '../controller/creator.js';
+import {creatorRouter} from '../controller/creatorController.js';
 import { verifyGoogleToken } from "../middleware/googleAuth.js";
 import { requireRole } from "../middleware/auth.js";
 import upload from "../middleware/upload.js";
