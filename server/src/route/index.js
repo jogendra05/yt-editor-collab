@@ -1,7 +1,7 @@
 import express from 'express';
-import { creatorAuth, uploadVideo } from "../controller/creatorController.js";
-// import { verifyGoogleToken } from "../middleware/googleAuth.js";
-// import { requireRole } from "../middleware/auth.js";
+import {creatorRouter} from '../controller/creatorController.js';
+import { verifyGoogleToken } from "../middleware/googleAuth.js";
+import { requireRole } from "../middleware/auth.js";
 import upload from "../middleware/upload.js";
 
 
