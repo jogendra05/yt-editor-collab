@@ -1,10 +1,13 @@
 import express from "express";
 import "dotenv/config"
 import { google } from "googleapis";
+import mainRouter from "./src/route/index"
 import open from "open";
 import fs from "fs";
 
 const app = express();
+app.use(cors())
+app.use("/api/", mainRouter) 
 const port = process.env.PORT;
 
 app.use(express.json());
