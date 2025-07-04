@@ -1,13 +1,14 @@
 import express from "express";
 import "dotenv/config"
-import { google } from "googleapis";
 import open from "open";
-import fs from "fs";
+import creatorRouter from "./src/route/creatorRoute.js";
 
 const app = express();
 const port = process.env.PORT;
 
 app.use(express.json());
+
+app.use("/creator", creatorRouter);
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
