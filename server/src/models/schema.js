@@ -33,6 +33,7 @@ const inviteSchema = new mongoose.Schema({
 const videoSchema = new mongoose.Schema({
   project_id: { type: mongoose.Schema.Types.ObjectId, ref: "Project", required: true },
   uploaded_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  assigned_to: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   s3_key: { type: String, required: true }, // Cloudinary URL or S3 key
   status: {
     type: String,
