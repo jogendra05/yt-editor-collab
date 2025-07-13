@@ -6,9 +6,13 @@ import cors from 'cors';
 import creatorRedirect from "./src/googleAuth.js";
 import connectDB from "./src/config/mongoDB.js";
 import connectCloudinary from "./src/config/cloudinary.js";
+import cookieParser from "cookie-parser";
 
 const app = express();
+
 app.use(cors())
+app.use(express.json());
+app.use(cookieParser());
 
 // DB connection
 connectDB();
