@@ -80,29 +80,59 @@ export const uploadVideo = async (req, res) => {
   }
 };
 
-// export const creatorRouter = async (req, res) => {
-//     try {
-//       const { project_id } = req.body;
+export const creatorRouter = async (req, res) => {
 
-//       if (!project_id || !req.file) {
-//         return res.status(400).json({ error: "Project ID and video file are required" });
-//       }
+  /**
+ * POST /api/projects/with-video
+ * multipart/form-data:
+ *   • name        = "My New Series"
+ *   • editorEmail = "edit@mail.com"
+ *   • video       = file
+ */
+    try {
+      const { name, editorEmail } = req.body;
+      if (!name || !editorEmail || !req.file)
+        return res.status(400).json({ error: "name, editorEmail and video are required" });
 
-//       const project = await Project.findOne({ _id: project_id, creator_id: req.userId });
-//       if (!project) {
-//         return res.status(403).json({ error: "Unauthorized: not your project" });
-//       }
+      /* 1️⃣  Create the project */
+      const project = await Project.create({
+        name,
+        creator_id: req.userId
+      });
 
-//       const video = await Video.create({
-//         project_id,
-//         uploaded_by: req.userId,
-//         s3_key: req.file.path,
-//         status: "pending"
-//       });
+      /* 2️⃣  Ensure editor exists (create user if first time) */
+      let editor = await User.findOne({ email: editorEmail });
+      if (!editor) {
+        editor = await User.create({ email: editorEmail, role: "editor" }); // password blank — will set later
+      }
 
-//       res.status(201).json({ message: "Video uploaded successfully", video });
-//     } catch (err) {
-//       console.error(err);
-//       res.status(500).json({ error: "Video upload failed" });
-//     }
-//   }
+      /* 3️⃣  Create or update Invite to accepted */
+      await Invite.findOneAndUpdate(
+        { project_id: project._id, email: editorEmail },
+        { project_id: project._id, email: editorEmail, status: "accepted" },
+        { upsert: true, new: true }
+      );
+
+      /* 4️⃣  Save the video and assign to editor */
+      const video = await Video.create({
+        project_id: project._id,
+        uploaded_by: req.userId,
+        assigned_to: editor._id,
+        s3_key: req.file.path, // Cloudinary URL
+        status: "pending"
+      });
+
+      res.status(201).json({
+        message: "Project, invite, and video created",
+        project,
+        editor,
+        video
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to create project with video" });
+    }
+  }
+  
+
+
