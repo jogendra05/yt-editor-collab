@@ -13,8 +13,17 @@ const userSchema = new mongoose.Schema({
     token_type: { type: String },
     refresh_token_expires_in: { type: Number },
     expiry_date: { type: Number },
-  }
+  },
+  refresh_token: { 
+    token: { type: String },
+    created_at: { type: Date, default: Date.now },
+  },
 });
+
+userSchema.index(
+  { 'refreshToken.createdAt': 1 },
+  { expireAfterSeconds: 30 * 24 * 60 * 60 }
+);
 
 // Project Schema
 const projectSchema = new mongoose.Schema({

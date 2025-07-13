@@ -2,6 +2,7 @@ import express from "express";
 import { google } from "googleapis";
 import { Video, Project, User } from "../models/schema.js";
 import fs from "fs";
+import { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken } from "../utils/jwt.js";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -25,30 +26,102 @@ export const creatorAuth = async (req, res) => {
 };
 
 export const creatorCallback = async (req, res) => {
-  const { code } = req.query;
-  const { tokens } = await oauth2Client.getToken(code);
-  oauth2Client.setCredentials(tokens);
+  try {
+    const { code } = req.query;
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
 
-  // Save tokens for later (in DB or file)
-  // fs.writeFileSync("tokens.json", JSON.stringify(tokens));
+    // Fetch user email from Google
+    const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
+    const userInfo = await oauth2.userinfo.get();
+    const email = userInfo.data.email;
 
-  // Fetch user email from Google
-  const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
-  const userInfo = await oauth2.userinfo.get();
-  const email = userInfo.data.email;
+    const user = await User.findOneAndUpdate(
+      { email },
+      {
+        email,
+        role: "creator",
+        youtubeTokens: tokens,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
-  // 7. Upsert user record in MongoDB
-  const user = await User.findOneAndUpdate(
-    { email },
-    {
-      email,
-      role: "creator",
-      youtubeTokens: tokens,
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-  res.send("Authentication successful! You can close this window.");
+    if (!user) {
+      return res.status(500).send("Invalid credentials");
+    }
+
+    const accessToken = signAccessToken({ sub: user._id });
+    const refreshToken = signRefreshToken({ sub: user._id });
+
+    user.refresh_token = { token: refreshToken, createdAt: Date.now() };
+    await user.save();
+
+    return res
+      .cookie("yteditor", refreshToken, {
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        httpOnly: true,
+        // secure: process.env.NODE_ENV === "production",
+        // sameSite: "strict",
+      })
+      .status(200)
+      .json({
+        accessToken,
+      });
+  } catch (error) {
+    console.error("Error during OAuth callback:", error);
+    return res.status(500).send("Authentication failed. Please try again.");
+  }
 };
+
+export const rotateRefreshToken = async (req, res) => {
+  try {
+    const token = req.cookies.yteditor;
+    if (!token) return res.status(401).json({ success: false, accessToken: "" });
+
+    let payload;
+    try {
+      payload = verifyRefreshToken(token);
+    } catch {
+      return res.status(403).json({ success: false, accessToken: "" });
+    }
+
+    const user = await User.findById(payload.sub);
+    if (!user || user.refresh_token.token !== token) {
+      return res.status(403).json({ ok: false, accessToken: "" });
+    }
+
+    // Rotate: issue new pair
+    const newAccessToken = signAccessToken({ sub: user._id });
+    const newRefreshToken = signRefreshToken({ sub: user._id });
+
+    user.refresh_token = { token: newRefreshToken, createdAt: Date.now() };
+    await user.save();
+
+    res
+      .cookie("yteditor", newRefreshToken, {
+        httpOnly: true,
+        // sameSite: "strict",
+        // secure: process.env.NODE_ENV === "production",
+        // path: "/refresh_token",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      })
+      .json({ accessToken: newAccessToken });
+  } catch (error) {
+    console.error("Error rotating refresh token:", error);
+    return res.status(500).json({ ok: false, accessToken: "" });
+  }
+};
+
+export const logout = async (req, res) => {
+  const token = req.cookies.yteditor;
+  if (token) {
+    try {
+      const payload = verifyRefreshToken(token);
+      await User.findByIdAndUpdate(payload.sub, { $unset: { refreshToken: '' } });
+    } catch {}
+  }
+  res.clearCookie('yteditor').json({ message: 'Logged out' });
+}
 
 export const uploadVideo = async (req, res) => {
   try {
