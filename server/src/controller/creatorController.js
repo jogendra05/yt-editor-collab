@@ -10,24 +10,30 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.REDIRECT_URI
 );
 
-export const creatorAuth = async (req, res) => {
+export const creatorAuth =  async (req, res) => {
+  const { role } = req.body;
   // Scopes required for uploading videos
   const SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
   ];
 
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline",
-    scope: SCOPES,
+    scope: role === "creator" ? SCOPES : SCOPES.slice(1),
     prompt: "consent",
+    state: role,
   });
   res.redirect(url);
 };
 
 export const creatorCallback = async (req, res) => {
   try {
-    const { code } = req.query;
+    const { code, state: role } = req.query;
+    if (!role) {
+      return res.status(400).send("Role not specified");
+    }
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
@@ -40,8 +46,8 @@ export const creatorCallback = async (req, res) => {
       { email },
       {
         email,
-        role: "creator",
-        youtubeTokens: tokens,
+        role: role === "creator" ? "creator" : "editor",
+        youtubeTokens: role === "creator" ? tokens : undefined,
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
