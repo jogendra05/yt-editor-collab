@@ -1,2 +1,2 @@
 ﻿# yt-editor-collab
-creator and editot collab
+creator and editot collab!
