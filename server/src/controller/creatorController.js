@@ -182,7 +182,7 @@ export const creatorRouter = async (req, res) => {
       /* 2️⃣  Ensure editor exists (create user if first time) */
       let editor = await User.findOne({ email: editorEmail });
       if (!editor) {
-        editor = await User.create({ email: editorEmail, role: "editor" }); // password blank — will set later
+        return res.status(400).json({"editor not found"}) // password blank — will set later
       }
 
       /* 3️⃣  Create or update Invite to accepted */
