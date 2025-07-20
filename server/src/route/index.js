@@ -6,13 +6,13 @@ import {
   creatorAuth,
   logout,
   rotateRefreshToken,
-  uploadVideo,
+  publishVideo,
 } from "../controller/creatorController.js";
 
 const creatorRouter = express.Router();
 
 creatorRouter.get("/sign-in", creatorAuth);
-creatorRouter.get("/upload", uploadVideo);
+creatorRouter.get("/upload", publishVideo);
 creatorRouter.post("/refresh-token", rotateRefreshToken);
 creatorRouter.post("logout", logout);
 // creatorRouter.post( "/send-video",verifyGoogleToken,requireRole("creator"),upload.single("video"),creatorRouter);
