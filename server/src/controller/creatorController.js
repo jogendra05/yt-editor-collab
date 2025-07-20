@@ -129,9 +129,13 @@ export const logout = async (req, res) => {
   res.clearCookie('yteditor').json({ message: 'Logged out' });
 }
 
-export const uploadVideo = async (req, res) => {
+export const publishVideo = async (req, res) => {
   try {
-    const tokens = JSON.parse(fs.readFileSync("tokens.json"));
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).send("Unauthorized");
+    }
+    
     oauth2Client.setCredentials(tokens);
 
     const youtube = google.youtube({ version: "v3", auth: oauth2Client });
