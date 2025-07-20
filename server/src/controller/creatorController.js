@@ -163,7 +163,7 @@ export const publishVideo = async (req, res) => {
   }
 };
 
-export const creatorRouter = async (req, res) => {
+export const creatorRoute = async (req, res) => {
 
   /**
  * POST /api/projects/with-video
@@ -180,19 +180,20 @@ export const creatorRouter = async (req, res) => {
       /* 1️⃣  Create the project */
       const project = await Project.create({
         name,
-        creator_id: req.userId
+        creator_id: req.user._id
+
       });
 
       /* 2️⃣  Ensure editor exists (create user if first time) */
       let editor = await User.findOne({ email: editorEmail });
       if (!editor) {
-        editor = await User.create({ email: editorEmail, role: "editor" }); // password blank — will set later
+        return res.status(400).json({error: "editor not found"}) // password blank — will set later
       }
 
       /* 3️⃣  Create or update Invite to accepted */
       await Invite.findOneAndUpdate(
         { project_id: project._id, email: editorEmail },
-        { project_id: project._id, email: editorEmail, status: "accepted" },
+        { project_id: project._id, email: editorEmail, status: "pending" },
         { upsert: true, new: true }
       );
 
@@ -217,5 +218,54 @@ export const creatorRouter = async (req, res) => {
     }
   }
   
+
+
+
+
+  
+export const editorRoute = async (req, res) => {
+
+
+  try {
+    const editorEmail = req.user.email; // get this from auth middleware
+
+    // Step 1: Find all invites for this editor
+    const invites = await Invite.find({ email: editorEmail});
+
+    const projectIds = invites.map(invite => invite.project_id);
+
+    // Step 2: Fetch all projects from those IDs
+    const projects = await Project.find({ _id: { $in: projectIds } }).populate("creator_id", "email");
+
+    res.json({ projects });
+  } catch (error) {
+    console.error("Error fetching editor projects:", error);
+    res.status(500).json({ message: "Something went wrong" });
+  }
+}
+
+export const editorAcceptInvite = async (req, res) => {
+  try {
+    const { inviteId } = req.body;
+    const invite = await Invite.findById(inviteId);
+
+    if (!invite || invite.email !== req.user.email) {
+      return res.status(403).json({ error: "Invalid invite" });
+    }
+
+    if (invite.status === "accepted") {
+      return res.status(400).json({ message: "Invite already accepted" });
+    }
+
+    invite.status = "accepted";
+    await invite.save();
+
+    res.status(200).json({ message: "Invite accepted" });
+  } catch (err) {
+    console.error("Invite accept error:", err);
+    res.status(500).json({ error: "Server error while accepting invite" });
+  }
+};
+
 
 
