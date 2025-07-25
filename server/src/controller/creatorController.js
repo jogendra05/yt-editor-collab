@@ -219,11 +219,7 @@ export const creatorRoute = async (req, res) => {
   }
   
 
-
-
-
-  
-export const editorRoute = async (req, res) => {
+export const editorProjects = async (req, res) => {
 
 
   try {
