@@ -135,31 +135,64 @@ export const publishVideo = async (req, res) => {
     if (!userId) {
       return res.status(401).send("Unauthorized");
     }
-    
-    oauth2Client.setCredentials(tokens);
 
+    // 1. Fetch user and ensure they’re a creator
+    const user = await User.findById(userId);
+    if (!user || user.role !== "creator" || !user.youtubeTokens) {
+      return res.status(403).send("You are not authorized to publish videos");
+    }
+
+    // 2. Set credentials on the OAuth2 client
+    oauth2Client.setCredentials(user.youtubeTokens);
+
+    // 3. Listen for token refreshes, and persist them
+    oauth2Client.on("tokens", async (tokens) => {
+      if (tokens.refresh_token || tokens.access_token) {
+        user.youtubeTokens = {
+          ...user.youtubeTokens,
+          ...tokens,
+          // preserve existing refresh_token if new one isn’t issued
+          refresh_token: tokens.refresh_token || user.youtubeTokens.refresh_token,
+        };
+        await user.save();
+      }
+    });
+
+    // 4. Prepare metadata
+    const { title, description, privacyStatus = "public" } = req.body;
+    if (!req.file) {
+      return res.status(400).send("No video file provided");
+    }
+    const videoPath = path.resolve(req.file.path);
+
+    // 5. Create YouTube client and upload
     const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-
     const response = await youtube.videos.insert({
       part: ["snippet", "status"],
       requestBody: {
-        snippet: {
-          title: "Test Video",
-          description: "Uploaded via API",
-        },
-        status: {
-          privacyStatus: "public",
-        },
+        snippet: { title, description },
+        status: { privacyStatus },
       },
       media: {
-        body: fs.createReadStream("./try.mp4"),
+        body: fs.createReadStream(videoPath),
       },
+    }, {
+      // Use resumable upload for large files
+      onUploadProgress: evt => {
+        const progress = (evt.bytesRead / fs.statSync(videoPath).size) * 100;
+        console.log(`Upload progress: ${Math.round(progress)}%`);
+      }
     });
 
-    res.send("Video uploaded: " + response.data.id);
+    // 6. Return the newly published video ID
+    return res.status(200).json({
+      videoId: response.data.id,
+      link: `https://youtu.be/${response.data.id}`
+    });
+
   } catch (error) {
     console.error("Upload error:", error);
-    res.status(500).send("Upload failed");
+    return res.status(500).send("Upload failed: " + (error.message || ""));
   }
 };
 
