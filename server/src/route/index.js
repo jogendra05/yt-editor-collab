@@ -4,7 +4,7 @@ import express from "express";
 import upload from "../middleware/upload.js";
 import {
   creatorAuth,
-  editorRoute,
+  editorProjects,
   logout,
   rotateRefreshToken,
   publishVideo,
@@ -17,7 +17,7 @@ creatorRouter.get("/upload", publishVideo);
 creatorRouter.post("/refresh-token", rotateRefreshToken);
 creatorRouter.post("logout", logout);
 // creatorRouter.post( "/send-video",verifyGoogleToken,requireRole("creator"),upload.single("video"),creatorRoute);
-creatorRouter.get("/editor/projects", editorRoute);
+creatorRouter.get("/editor/projects", editorProjects);
 creatorRouter.post("/invite/accept", editorAcceptInvite);
 
 export default creatorRouter;
