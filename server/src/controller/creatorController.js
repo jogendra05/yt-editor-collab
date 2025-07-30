@@ -1,8 +1,9 @@
-import express from "express";
 import { google } from "googleapis";
-import { Video, Project, User } from "../models/schema.js";
+import { Video, Project, User, Invite } from "../models/schema.js";
 import fs from "fs";
-import { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken } from "../utils/jwt.js";
+import path from "path";
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
+import { v2 as cloudinary } from 'cloudinary';
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -10,34 +11,46 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.REDIRECT_URI
 );
 
-export const creatorAuth =  async (req, res) => {
-  const { role } = req.body;
-  // Scopes required for uploading videos
-  const SCOPES = [
-    "https://www.googleapis.com/auth/youtube.upload",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-  ];
+export const creatorAuth = async (req, res) => {
+  try {
+    const { role } = req.query;
+    
+    if (!role || !['creator', 'editor'].includes(role)) {
+      return res.status(400).send("Invalid or missing role parameter");
+    }
 
-  const url = oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: role === "creator" ? SCOPES : SCOPES.slice(1),
-    prompt: "consent",
-    state: role,
-  });
-  res.redirect(url);
+    const SCOPES = [
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+    ];
+
+    const url = oauth2Client.generateAuthUrl({
+      access_type: "offline",
+      scope: role === "creator" ? SCOPES : SCOPES.slice(1),
+      prompt: "consent",
+      state: role,
+      include_granted_scopes: true,
+    });
+    
+    res.redirect(url);
+  } catch (error) {
+    console.error("OAuth URL generation error:", error);
+    res.status(500).send("Failed to generate OAuth URL");
+  }
 };
 
 export const creatorCallback = async (req, res) => {
   try {
     const { code, state: role } = req.query;
+    
     if (!role) {
       return res.status(400).send("Role not specified");
     }
+    
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    // Fetch user email from Google
     const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
     const userInfo = await oauth2.userinfo.get();
     const email = userInfo.data.email;
@@ -52,30 +65,17 @@ export const creatorCallback = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    if (!user) {
-      return res.status(500).send("Invalid credentials");
-    }
-
     const accessToken = signAccessToken({ sub: user._id });
     const refreshToken = signRefreshToken({ sub: user._id });
 
     user.refresh_token = { token: refreshToken, createdAt: Date.now() };
     await user.save();
 
-    return res
-      .cookie("yteditor", refreshToken, {
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        httpOnly: true,
-        // secure: process.env.NODE_ENV === "production",
-        // sameSite: "strict",
-      })
-      .status(200)
-      .json({
-        accessToken,
-      });
+    // Redirect to frontend with token
+    res.redirect(`http://localhost:5173/?token=${accessToken}`);
   } catch (error) {
     console.error("Error during OAuth callback:", error);
-    return res.status(500).send("Authentication failed. Please try again.");
+    res.status(500).send("Authentication failed. Please try again.");
   }
 };
 
@@ -93,10 +93,9 @@ export const rotateRefreshToken = async (req, res) => {
 
     const user = await User.findById(payload.sub);
     if (!user || user.refresh_token.token !== token) {
-      return res.status(403).json({ ok: false, accessToken: "" });
+      return res.status(403).json({ success: false, accessToken: "" });
     }
 
-    // Rotate: issue new pair
     const newAccessToken = signAccessToken({ sub: user._id });
     const newRefreshToken = signRefreshToken({ sub: user._id });
 
@@ -106,15 +105,12 @@ export const rotateRefreshToken = async (req, res) => {
     res
       .cookie("yteditor", newRefreshToken, {
         httpOnly: true,
-        // sameSite: "strict",
-        // secure: process.env.NODE_ENV === "production",
-        // path: "/refresh_token",
         maxAge: 7 * 24 * 60 * 60 * 1000,
       })
       .json({ accessToken: newAccessToken });
   } catch (error) {
     console.error("Error rotating refresh token:", error);
-    return res.status(500).json({ ok: false, accessToken: "" });
+    return res.status(500).json({ success: false, accessToken: "" });
   }
 };
 
@@ -123,155 +119,165 @@ export const logout = async (req, res) => {
   if (token) {
     try {
       const payload = verifyRefreshToken(token);
-      await User.findByIdAndUpdate(payload.sub, { $unset: { refreshToken: '' } });
+      await User.findByIdAndUpdate(payload.sub, { $unset: { refresh_token: '' } });
     } catch {}
   }
   res.clearCookie('yteditor').json({ message: 'Logged out' });
-}
+};
 
-export const publishVideo = async (req, res) => {
+export const getUserInfo = async (req, res) => {
   try {
-    const userId = req.userId;
-    if (!userId) {
-      return res.status(401).send("Unauthorized");
-    }
-
-    // 1. Fetch user and ensure they’re a creator
-    const user = await User.findById(userId);
-    if (!user || user.role !== "creator" || !user.youtubeTokens) {
-      return res.status(403).send("You are not authorized to publish videos");
-    }
-
-    // 2. Set credentials on the OAuth2 client
-    oauth2Client.setCredentials(user.youtubeTokens);
-
-    // 3. Listen for token refreshes, and persist them
-    oauth2Client.on("tokens", async (tokens) => {
-      if (tokens.refresh_token || tokens.access_token) {
-        user.youtubeTokens = {
-          ...user.youtubeTokens,
-          ...tokens,
-          // preserve existing refresh_token if new one isn’t issued
-          refresh_token: tokens.refresh_token || user.youtubeTokens.refresh_token,
-        };
-        await user.save();
-      }
-    });
-
-    // 4. Prepare metadata
-    const { title, description, privacyStatus = "public" } = req.body;
-    if (!req.file) {
-      return res.status(400).send("No video file provided");
-    }
-    const videoPath = path.resolve(req.file.path);
-
-    // 5. Create YouTube client and upload
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-    const response = await youtube.videos.insert({
-      part: ["snippet", "status"],
-      requestBody: {
-        snippet: { title, description },
-        status: { privacyStatus },
-      },
-      media: {
-        body: fs.createReadStream(videoPath),
-      },
-    }, {
-      // Use resumable upload for large files
-      onUploadProgress: evt => {
-        const progress = (evt.bytesRead / fs.statSync(videoPath).size) * 100;
-        console.log(`Upload progress: ${Math.round(progress)}%`);
-      }
-    });
-
-    // 6. Return the newly published video ID
-    return res.status(200).json({
-      videoId: response.data.id,
-      link: `https://youtu.be/${response.data.id}`
-    });
-
+    const user = await User.findById(req.userId).select('-youtubeTokens -refresh_token');
+    res.json({ user });
   } catch (error) {
-    console.error("Upload error:", error);
-    return res.status(500).send("Upload failed: " + (error.message || ""));
+    res.status(500).json({ error: "Failed to fetch user info" });
   }
 };
 
-export const creatorRoute = async (req, res) => {
-
-  /**
- * POST /api/projects/with-video
- * multipart/form-data:
- *   • name        = "My New Series"
- *   • editorEmail = "edit@mail.com"
- *   • video       = file
- */
-    try {
-      const { name, editorEmail } = req.body;
-      if (!name || !editorEmail || !req.file)
-        return res.status(400).json({ error: "name, editorEmail and video are required" });
-
-      /* 1️⃣  Create the project */
-      const project = await Project.create({
-        name,
-        creator_id: req.user._id
-
-      });
-
-      /* 2️⃣  Ensure editor exists (create user if first time) */
-      let editor = await User.findOne({ email: editorEmail });
-      if (!editor) {
-        return res.status(400).json({error: "editor not found"}) // password blank — will set later
-      }
-
-      /* 3️⃣  Create or update Invite to accepted */
-      await Invite.findOneAndUpdate(
-        { project_id: project._id, email: editorEmail },
-        { project_id: project._id, email: editorEmail, status: "pending" },
-        { upsert: true, new: true }
-      );
-
-      /* 4️⃣  Save the video and assign to editor */
-      const video = await Video.create({
-        project_id: project._id,
-        uploaded_by: req.userId,
-        assigned_to: editor._id,
-        s3_key: req.file.path, // Cloudinary URL
-        status: "pending"
-      });
-
-      res.status(201).json({
-        message: "Project, invite, and video created",
-        project,
-        editor,
-        video
-      });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Failed to create project with video" });
+export const createProject = async (req, res) => {
+  try {
+    const { name, editorEmail } = req.body;
+    if (!name || !editorEmail || !req.file) {
+      return res.status(400).json({ error: "name, editorEmail and video are required" });
     }
+
+    // Create the project
+    const project = await Project.create({
+      name,
+      creator_id: req.userId
+    });
+
+    // Find editor
+    let editor = await User.findOne({ email: editorEmail });
+    if (!editor) {
+      return res.status(400).json({ error: "Editor not found. Please ask them to sign up first." });
+    }
+
+    // Create invite
+    await Invite.findOneAndUpdate(
+      { project_id: project._id, email: editorEmail },
+      { project_id: project._id, email: editorEmail, status: "pending" },
+      { upsert: true, new: true }
+    );
+
+    // Save the video
+    const video = await Video.create({
+      project_id: project._id,
+      uploaded_by: req.userId,
+      assigned_to: editor._id,
+      s3_key: req.file.path, // Cloudinary URL
+      cloudinary_public_id:  req.file.filename,
+      status: "pending"
+    });
+
+    res.status(201).json({
+      message: "Project, invite, and video created",
+      project,
+      editor: { email: editor.email },
+      video
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to create project with video" });
   }
-  
+};
+
+export const getProjectVideos = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+    
+    const isCreator = project.creator_id.toString() === req.userId;
+    const isAssignedEditor = await Video.exists({ 
+      project_id: projectId, 
+      assigned_to: req.userId 
+    });
+    
+    if (!isCreator && !isAssignedEditor) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    
+    const records  = await Video.find({ project_id: projectId })
+      .populate('uploaded_by', 'email')
+      .populate('assigned_to', 'email')
+      .sort({ created_at: -1 });
+
+    const videos = await Video.find({ project_id: projectId })
+      .populate('uploaded_by', 'email')
+      .populate('assigned_to', 'email')
+      .sort({ created_at: -1 })
+      .lean();
+
+    videos.forEach(video => {
+      video.download_url = cloudinary.url(video.cloudinary_public_id, {
+        resource_type: 'video',
+        flags:         'attachment',
+        attachment:    `${video.cloudinary_public_id}.mp4`
+      });
+    });
+    res.json({ videos });
+  } catch (error) {
+    console.error("Error fetching project videos:", error);
+    res.status(500).json({ error: "Failed to fetch videos" });
+  }
+};
+
+export const approveVideo = async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const { action } = req.body;
+    
+    const video = await Video.findById(videoId).populate('project_id');
+    if (!video) {
+      return res.status(404).json({ error: "Video not found" });
+    }
+    
+    if (video.project_id.creator_id.toString() !== req.userId) {
+      return res.status(403).json({ error: "Only project creator can approve videos" });
+    }
+    
+    video.status = action === 'approve' ? 'approved' : 'changes_requested';
+    await video.save();
+    
+    res.json({ message: `Video ${action}d successfully`, video });
+  } catch (error) {
+    console.error("Error updating video status:", error);
+    res.status(500).json({ error: "Failed to update video status" });
+  }
+};
+
+export const getCreatorProjects = async (req, res) => {
+  try {
+    const projects = await Project.find({ creator_id: req.userId })
+      .populate('creator_id', 'email')
+      .sort({ _id: -1 });
+    
+    res.json({ projects });
+  } catch (error) {
+    console.error("Error fetching creator projects:", error);
+    res.status(500).json({ error: "Failed to fetch projects" });
+  }
+};
 
 export const editorProjects = async (req, res) => {
-
-
   try {
-    const editorEmail = req.user.email; // get this from auth middleware
-
-    // Step 1: Find all invites for this editor
-    const invites = await Invite.find({ email: editorEmail});
-
+    const editorEmail = req.user.email;
+    const invites = await Invite.find({ email: editorEmail });
     const projectIds = invites.map(invite => invite.project_id);
-
-    // Step 2: Fetch all projects from those IDs
-    const projects = await Project.find({ _id: { $in: projectIds } }).populate("creator_id", "email");
-
+    
+    const projects = await Project.find({ _id: { $in: projectIds } })
+      .populate("creator_id", "email");
+    
     res.json({ projects });
   } catch (error) {
     console.error("Error fetching editor projects:", error);
     res.status(500).json({ message: "Something went wrong" });
   }
-}
+};
 
 export const editorAcceptInvite = async (req, res) => {
   try {
@@ -296,5 +302,180 @@ export const editorAcceptInvite = async (req, res) => {
   }
 };
 
+export const uploadToYouTube = async (req, res) => {
+  try {
+    const { videoId, title, description } = req.body;
+    
+    if (!videoId) {
+      return res.status(400).json({ error: "videoId is required" });
+    }
 
+    // Get user and verify YouTube tokens
+    const user = await User.findById(req.userId);
+    if (!user || !user.youtubeTokens) {
+      return res.status(403).json({ 
+        error: "YouTube account not connected. Please sign out and sign in as creator again to connect your YouTube account." 
+      });
+    }
 
+    // Get video details
+    const video = await Video.findById(videoId).populate('project_id');
+    if (!video) {
+      return res.status(404).json({ error: "Video not found" });
+    }
+
+    // Verify user is the creator of the project
+    if (video.project_id.creator_id.toString() !== req.userId) {
+      return res.status(403).json({ error: "Only project creator can upload videos to YouTube" });
+    }
+
+    // Verify video is approved
+    if (video.status !== 'approved') {
+      return res.status(400).json({ error: "Video must be approved before uploading to YouTube" });
+    }
+
+    // Check if already uploaded
+    if (video.youtube_video_id) {
+      return res.status(400).json({ 
+        error: "Video already uploaded to YouTube",
+        videoUrl: `https://www.youtube.com/watch?v=${video.youtube_video_id}`
+      });
+    }
+
+    console.log("Setting up OAuth2 client...");
+    
+    // Set up OAuth2 client with stored tokens
+    oauth2Client.setCredentials(user.youtubeTokens);
+
+    // Check and refresh token if needed
+    if (user.youtubeTokens.expiry_date && Date.now() >= user.youtubeTokens.expiry_date) {
+      console.log("Refreshing expired YouTube token...");
+      try {
+        const { credentials } = await oauth2Client.refreshAccessToken();
+        oauth2Client.setCredentials(credentials);
+        
+        // Update user's tokens in database
+        user.youtubeTokens = credentials;
+        await user.save();
+        console.log("Token refreshed successfully");
+      } catch (refreshError) {
+        console.error("Token refresh error:", refreshError);
+        return res.status(401).json({ 
+          error: "YouTube authentication expired. Please sign out and sign in again to reconnect your YouTube account." 
+        });
+      }
+    }
+
+    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+
+    console.log("Downloading video from Cloudinary:", video.s3_key);
+    
+    // Download video from Cloudinary URL
+    const videoResponse = await fetch(video.s3_key);
+    
+    if (!videoResponse.ok) {
+      console.error("Failed to fetch video from Cloudinary:", videoResponse.status, videoResponse.statusText);
+      throw new Error(`Failed to fetch video from Cloudinary: ${videoResponse.status} ${videoResponse.statusText}`);
+    }
+
+    // Get content type and size for logging
+    const contentType = videoResponse.headers.get('content-type');
+    const contentLength = videoResponse.headers.get('content-length');
+    console.log(`Video info - Type: ${contentType}, Size: ${contentLength} bytes`);
+
+    // Convert response to buffer and create stream
+    console.log("Converting video to stream...");
+    const videoBuffer = await videoResponse.arrayBuffer();
+    const { Readable } = await import('stream');
+    const videoStream = Readable.from(Buffer.from(videoBuffer));
+
+    // Prepare video metadata
+    const videoTitle = title || `${video.project_id.name} - Final Version`;
+    const videoDescription = description || `Video for project: ${video.project_id.name}\n\nCreated with YT Editor Hub - A collaborative video editing platform.`;
+
+    console.log("Starting YouTube upload...");
+    console.log("Title:", videoTitle);
+    console.log("Description:", videoDescription);
+
+    // Upload to YouTube
+    const uploadResponse = await youtube.videos.insert({
+      part: ["snippet", "status"],
+      requestBody: {
+        snippet: {
+          title: videoTitle,
+          description: videoDescription,
+          tags: ["youtube", "editor", "collaboration", "video", "content"],
+          categoryId: "22", // People & Blogs category
+          defaultLanguage: "en",
+          defaultAudioLanguage: "en"
+        },
+        status: {
+          privacyStatus: "private", // Options: "private", "public", "unlisted"
+          selfDeclaredMadeForKids: false,
+          embeddable: true,
+          publicStatsViewable: true
+        },
+      },
+      media: {
+        body: videoStream,
+      },
+    });
+
+    const youtubeVideoId = uploadResponse.data.id;
+    const youtubeUrl = `https://www.youtube.com/watch?v=${youtubeVideoId}`;
+    
+    console.log("YouTube upload successful!");
+    console.log("YouTube Video ID:", youtubeVideoId);
+    console.log("YouTube URL:", youtubeUrl);
+
+    // Update video record with YouTube information
+    video.youtube_video_id = youtubeVideoId;
+    video.youtube_title = videoTitle;
+    video.youtube_description = videoDescription;
+    video.uploaded_to_youtube = true;
+    video.youtube_upload_date = new Date();
+    await video.save();
+
+    console.log("Database updated successfully");
+
+    res.status(200).json({ 
+      success: true,
+      message: "Video uploaded to YouTube successfully!",
+      videoId: youtubeVideoId,
+      videoUrl: youtubeUrl,
+      title: videoTitle,
+      uploadDate: new Date().toISOString()
+    });
+
+  } catch (err) {
+    console.error("YouTube upload error:", err);
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = "Failed to upload video to YouTube";
+    let statusCode = 500;
+    
+    if (err.message.includes('quota')) {
+      errorMessage = "YouTube API quota exceeded. Please try again later.";
+      statusCode = 429;
+    } else if (err.message.includes('authentication') || err.message.includes('credential')) {
+      errorMessage = "YouTube authentication failed. Please sign out and sign in again.";
+      statusCode = 401;
+    } else if (err.message.includes('fetch') || err.message.includes('Cloudinary')) {
+      errorMessage = "Failed to download video from cloud storage. Please ensure the video file exists and is accessible.";
+      statusCode = 422;
+    } else if (err.message.includes('forbidden') || err.message.includes('403')) {
+      errorMessage = "YouTube upload forbidden. Your account may not have upload permissions or may need verification.";
+      statusCode = 403;
+    } else if (err.message.includes('invalid')) {
+      errorMessage = "Invalid video format or corrupted file. Please re-upload the video.";
+      statusCode = 422;
+    }
+    
+    res.status(statusCode).json({ 
+      success: false,
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      timestamp: new Date().toISOString()
+    });
+  }
+};
