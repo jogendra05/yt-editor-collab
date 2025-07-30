@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema({
   youtubeTokens: {
     access_token: { type: String },
     refresh_token: { type: String },
-    scope: {type: String},
+    scope: { type: String },
     token_type: { type: String },
     refresh_token_expires_in: { type: Number },
     expiry_date: { type: Number },
@@ -28,17 +28,19 @@ userSchema.index(
 // Project Schema
 const projectSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  creator_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }
+  creator_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  created_at: { type: Date, default: Date.now }
 });
 
 // Invite Schema
 const inviteSchema = new mongoose.Schema({
   project_id: { type: mongoose.Schema.Types.ObjectId, ref: "Project", required: true },
   email: { type: String, required: true },
-  status: { type: String, enum: ["pending", "accepted"], required: true }
+  status: { type: String, enum: ["pending", "accepted"], required: true },
+  created_at: { type: Date, default: Date.now }
 });
 
-// Video Schema
+// Video Schema - Updated with YouTube fields
 const videoSchema = new mongoose.Schema({
   project_id: { type: mongoose.Schema.Types.ObjectId, ref: "Project", required: true },
   uploaded_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -49,6 +51,12 @@ const videoSchema = new mongoose.Schema({
     enum: ["pending", "approved", "changes_requested"],
     default: "pending"
   },
+  // YouTube-related fields
+  youtube_video_id: { type: String }, // YouTube video ID after upload
+  youtube_title: { type: String }, // Title used when uploading to YouTube
+  youtube_description: { type: String }, // Description used when uploading to YouTube
+  uploaded_to_youtube: { type: Boolean, default: false },
+  youtube_upload_date: { type: Date },
   created_at: { type: Date, default: Date.now }
 });
 
