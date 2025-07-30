@@ -3,6 +3,7 @@ import { Video, Project, User, Invite } from "../models/schema.js";
 import fs from "fs";
 import path from "path";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
+import { uploadToCloudinary } from "../middleware/cloudinaryUpload.js";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -160,13 +161,26 @@ export const createProject = async (req, res) => {
     );
 
     // Save the video
+    // const video = await Video.create({
+    //   project_id: project._id,
+    //   uploaded_by: req.userId,
+    //   assigned_to: editor._id,
+    //   s3_key: req.file.path, // Cloudinary URL
+    //   status: "pending"
+    // });
+
+    // Upload to Cloudinary manually
+    const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
+
+    // Save the video
     const video = await Video.create({
       project_id: project._id,
       uploaded_by: req.userId,
       assigned_to: editor._id,
-      s3_key: req.file.path, // Cloudinary URL
+      s3_key: cloudinaryResult.secure_url, // cloudinary URL
       status: "pending"
     });
+
 
     res.status(201).json({
       message: "Project, invite, and video created",
