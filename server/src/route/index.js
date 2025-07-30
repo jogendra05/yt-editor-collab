@@ -1,23 +1,36 @@
 import express from "express";
-// import { verifyGoogleToken } from "../middleware/googleAuth.js";
-// import { requireRole } from "../middleware/auth.js";
-import upload from "../middleware/upload.js";
+import upload from "../middleware/cloudinaryUpload.js";
+import authMiddleware from "../middleware/authMiddleware.js";
 import {
   creatorAuth,
-  editorRoute,
+  editorProjects,
+  editorAcceptInvite,
   logout,
   rotateRefreshToken,
-  uploadVideo,
+  getUserInfo,
+  createProject,
+  getProjectVideos,
+  approveVideo,
+  getCreatorProjects,
+  uploadToYouTube
 } from "../controller/creatorController.js";
 
 const creatorRouter = express.Router();
 
+// Public routes
 creatorRouter.get("/sign-in", creatorAuth);
-creatorRouter.get("/upload", uploadVideo);
 creatorRouter.post("/refresh-token", rotateRefreshToken);
-creatorRouter.post("logout", logout);
-// creatorRouter.post( "/send-video",verifyGoogleToken,requireRole("creator"),upload.single("video"),creatorRoute);
-creatorRouter.get("/editor/projects", editorRoute);
-creatorRouter.post("/invite/accept", editorAcceptInvite);
+
+// Protected routes
+creatorRouter.get("/me", authMiddleware, getUserInfo);
+creatorRouter.post("/logout", authMiddleware, logout);
+creatorRouter.post("/projects", authMiddleware, upload.single("video"), createProject);
+creatorRouter.get("/projects", authMiddleware, getCreatorProjects);
+creatorRouter.get("/projects/:projectId/videos", authMiddleware, getProjectVideos);
+creatorRouter.put("/videos/:videoId/approve", authMiddleware, approveVideo);
+creatorRouter.get("/editor/projects", authMiddleware, editorProjects);
+creatorRouter.post("/invite/accept", authMiddleware, editorAcceptInvite);
+creatorRouter.post("/videos/upload-to-youtube", authMiddleware, uploadToYouTube);
+
 
 export default creatorRouter;
