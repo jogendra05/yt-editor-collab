@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
+import { X, Upload, User, FileVideo, Sparkles, Star } from 'lucide-react';
 import api from '../utils/api'; // Adjust the path as needed
-
 
 export const CreateProjectModal = ({ onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -35,58 +35,87 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-        <div className="p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Create New Project</h2>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+      {/* Animated background particles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-red-400 rounded-full animate-float opacity-60"></div>
+        <div className="absolute top-3/4 right-1/4 w-1 h-1 bg-pink-400 rounded-full animate-float-delayed opacity-40"></div>
+        <div className="absolute top-1/2 left-3/4 w-1.5 h-1.5 bg-purple-400 rounded-full animate-float-slow opacity-50"></div>
+      </div>
+      
+      <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700/50">
+        <div className="relative p-8">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-white transition-all duration-300 p-2 hover:bg-gray-700/50 rounded-full hover:rotate-90 hover:scale-110 group"
+          >
+            <X className="h-5 w-5 group-hover:drop-shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
+          </button>
+
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse-glow hover:scale-110 transition-all duration-300 relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-pink-500 rounded-2xl blur-lg opacity-0 group-hover:opacity-50 transition-opacity duration-300"></div>
+              <FileVideo className="h-8 w-8 text-white relative z-10" />
+              <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-yellow-300 animate-spin-slow" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2 animate-slideInUp">🎬 Create New Project</h2>
+            <p className="text-gray-400 animate-slideInUp animation-delay-100">✨ Start your next video collaboration</p>
+          </div>
           
-          <div className="space-y-4">
+          <div className="space-y-6 animate-slideInUp animation-delay-200">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Project Name
+              <label className="block text-sm font-medium text-gray-300 mb-3 flex items-center gap-2 hover:text-white transition-colors">
+                <FileVideo className="h-4 w-4" />
+                🎯 Project Name
               </label>
               <input
                 type="text"
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-white placeholder-gray-400 transition-all duration-300 hover:bg-gray-800/70 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:border-gray-500"
                 placeholder="Enter project name"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Editor Email
+              <label className="block text-sm font-medium text-gray-300 mb-3 flex items-center gap-2 hover:text-white transition-colors">
+                <User className="h-4 w-4" />
+                👤 Editor Email
               </label>
               <input
                 type="email"
                 required
                 value={formData.editorEmail}
                 onChange={(e) => setFormData({ ...formData, editorEmail: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-white placeholder-gray-400 transition-all duration-300 hover:bg-gray-800/70 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:border-gray-500"
                 placeholder="editor@example.com"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Initial Video
+              <label className="block text-sm font-medium text-gray-300 mb-3 flex items-center gap-2 hover:text-white transition-colors">
+                <Upload className="h-4 w-4" />
+                🎥 Initial Video
               </label>
-              <input
-                type="file"
-                required
-                accept="video/*"
-                onChange={(e) => setFormData({ ...formData, video: e.target.files[0] })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              />
+              <div className="relative">
+                <input
+                  type="file"
+                  required
+                  accept="video/*"
+                  onChange={(e) => setFormData({ ...formData, video: e.target.files[0] })}
+                  className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 transition-all duration-300 hover:bg-gray-800/70 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:border-gray-500"
+                />
+              </div>
             </div>
             
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3 pt-6">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                className="px-6 py-3 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-xl transition-all duration-300 font-medium hover:scale-105 hover:shadow-lg"
                 disabled={isSubmitting}
               >
                 Cancel
@@ -95,8 +124,10 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
                 type="button"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg disabled:opacity-50"
+                className="bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white px-8 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 font-semibold shadow-lg hover:scale-105 hover:shadow-[0_0_25px_rgba(239,68,68,0.5)] relative group overflow-hidden"
               >
+                <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                <Star className="inline-block w-4 h-4 mr-2 animate-spin-slow" />
                 {isSubmitting ? 'Creating...' : 'Create Project'}
               </button>
             </div>
@@ -105,4 +136,4 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
       </div>
     </div>
   );
-};
+}

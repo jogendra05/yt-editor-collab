@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import {LoginPage} from './components/LoginPage';
-import {CreatorDashboard} from './components/CreatorDashboard';
-import {EditorDashboard} from './components/EditorDashboard';
+import { LoginPage } from './components/LoginPage';
+import { CreatorDashboard } from './components/CreatorDashboard';
+import { EditorDashboard } from './components/EditorDashboard';
+import { LandingPage } from './components/LandingPage'; // ✅ import it
 import api from './utils/api.js';
 
-// Main App Component
 const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showLanding, setShowLanding] = useState(true); // ✅ state for landing
 
   useEffect(() => {
-    // Move checkAuth function inside useEffect to fix dependency issue
     const checkAuth = async () => {
       try {
         const token = localStorage.getItem('accessToken');
@@ -27,8 +27,7 @@ const App = () => {
     };
 
     checkAuth();
-    
-    // Handle OAuth callback
+
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     if (token) {
@@ -36,13 +35,14 @@ const App = () => {
       window.history.replaceState({}, document.title, window.location.pathname);
       checkAuth();
     }
-  }, []); // Now the dependency array is correct since checkAuth is defined inside
+  }, []);
 
   const handleLogout = async () => {
     try {
       await api.logout();
       localStorage.removeItem('accessToken');
       setUser(null);
+      setShowLanding(true); // ✅ return to landing on logout
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -54,6 +54,10 @@ const App = () => {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
       </div>
     );
+  }
+
+  if (showLanding && !user) {
+    return <LandingPage onStart={() => setShowLanding(false)} />;
   }
 
   if (!user) {
