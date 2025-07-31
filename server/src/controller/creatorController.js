@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
 import { v2 as cloudinary } from 'cloudinary';
+import {notifyOnUpload} from "../utils/sendEmail.js";
+import { uploadToCloudinary } from "../middleware/cloudinaryUpload.js";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -180,6 +182,12 @@ export const createProject = async (req, res) => {
       s3_key: cloudinaryResult.secure_url, // cloudinary URL
       status: "pending"
     });
+    // notifyOnUpload({
+    //   creatorEmail: req.user.email,
+    //   editorEmail:  editor.email,
+    //   videoUrl:     "google.com",
+    //   by:           'creator'
+    // }, res);
 
     res.status(201).json({
       message: "Project, invite, and video created",
@@ -475,10 +483,25 @@ export const signedDataUpdate = async (req, res) => {
       assigned_to,
       s3_key: url,
       cloudinary_public_id: public_id,
-      youtube_thumbnail_url: thumbnail_url
+      youtube_thumbnail_url: thumbnail_url,
+      status: "editingComplete"
     });
 
+    const project = await Project.findById(project_id).populate("creator_id", "email");
+
+    if (!project) {
+      console.error(`Project not found: ${project_id}`);
+      return res.status(201).json(video);
+    }
+
     await video.save();
+    // notifyOnUpload({
+    //   creatorEmail: project.creator_id.email,
+    //   editorEmail:  req.user.email,
+    //   videoUrl:     "google.com",
+    //   by:           'editor'
+    // }, res);
+
     res.status(201).json(video);
   } catch (err) {
     console.error(err);

@@ -49,7 +49,7 @@ const videoSchema = new mongoose.Schema({
   cloudinary_public_id: String,
   status: {
     type: String,
-    enum: ["pending", "approved", "changes_requested"],
+    enum: ["pending", "approved", "changes_requested", "editingComplete"],
     default: "pending"
   },
   // YouTube-related fields
