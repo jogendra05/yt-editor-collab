@@ -5,6 +5,7 @@ import path from "path";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
 import { uploadToCloudinary } from "../middleware/cloudinaryUpload.js";
 
+
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
@@ -169,6 +170,7 @@ export const createProject = async (req, res) => {
     //   status: "pending"
     // });
 
+
     // Upload to Cloudinary manually
     const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
 
@@ -213,11 +215,24 @@ export const getProjectVideos = async (req, res) => {
       return res.status(403).json({ error: "Access denied" });
     }
     
-    const videos = await Video.find({ project_id: projectId })
+    const records  = await Video.find({ project_id: projectId })
       .populate('uploaded_by', 'email')
       .populate('assigned_to', 'email')
       .sort({ created_at: -1 });
-    
+
+    const videos = await Video.find({ project_id: projectId })
+      .populate('uploaded_by', 'email')
+      .populate('assigned_to', 'email')
+      .sort({ created_at: -1 })
+      .lean();
+
+    videos.forEach(video => {
+      video.download_url = cloudinary.url(video.cloudinary_public_id, {
+        resource_type: 'video',
+        flags:         'attachment',
+        attachment:    `${video.cloudinary_public_id}.mp4`
+      });
+    });
     res.json({ videos });
   } catch (error) {
     console.error("Error fetching project videos:", error);
@@ -303,7 +318,7 @@ export const editorAcceptInvite = async (req, res) => {
 
 export const uploadToYouTube = async (req, res) => {
   try {
-    const { videoId, title, description } = req.body;
+    const { videoId, title, description, privacyStatus, madeForKids, thumbnailUrl } = req.body;
     
     if (!videoId) {
       return res.status(400).json({ error: "videoId is required" });
@@ -341,24 +356,17 @@ export const uploadToYouTube = async (req, res) => {
       });
     }
 
-    console.log("Setting up OAuth2 client...");
-    
     // Set up OAuth2 client with stored tokens
     oauth2Client.setCredentials(user.youtubeTokens);
 
-    // Check and refresh token if needed
+    // Refresh token if expired
     if (user.youtubeTokens.expiry_date && Date.now() >= user.youtubeTokens.expiry_date) {
-      console.log("Refreshing expired YouTube token...");
       try {
         const { credentials } = await oauth2Client.refreshAccessToken();
         oauth2Client.setCredentials(credentials);
-        
-        // Update user's tokens in database
         user.youtubeTokens = credentials;
         await user.save();
-        console.log("Token refreshed successfully");
       } catch (refreshError) {
-        console.error("Token refresh error:", refreshError);
         return res.status(401).json({ 
           error: "YouTube authentication expired. Please sign out and sign in again to reconnect your YouTube account." 
         });
@@ -367,114 +375,116 @@ export const uploadToYouTube = async (req, res) => {
 
     const youtube = google.youtube({ version: "v3", auth: oauth2Client });
 
-    console.log("Downloading video from Cloudinary:", video.s3_key);
-    
-    // Download video from Cloudinary URL
+    // Download video from Cloudinary
     const videoResponse = await fetch(video.s3_key);
-    
-    if (!videoResponse.ok) {
-      console.error("Failed to fetch video from Cloudinary:", videoResponse.status, videoResponse.statusText);
-      throw new Error(`Failed to fetch video from Cloudinary: ${videoResponse.status} ${videoResponse.statusText}`);
-    }
-
-    // Get content type and size for logging
-    const contentType = videoResponse.headers.get('content-type');
-    const contentLength = videoResponse.headers.get('content-length');
-    console.log(`Video info - Type: ${contentType}, Size: ${contentLength} bytes`);
-
-    // Convert response to buffer and create stream
-    console.log("Converting video to stream...");
+    if (!videoResponse.ok) throw new Error(`Failed to fetch video: ${videoResponse.status}`);
     const videoBuffer = await videoResponse.arrayBuffer();
     const { Readable } = await import('stream');
     const videoStream = Readable.from(Buffer.from(videoBuffer));
 
     // Prepare video metadata
     const videoTitle = title || `${video.project_id.name} - Final Version`;
-    const videoDescription = description || `Video for project: ${video.project_id.name}\n\nCreated with YT Editor Hub - A collaborative video editing platform.`;
-
-    console.log("Starting YouTube upload...");
-    console.log("Title:", videoTitle);
-    console.log("Description:", videoDescription);
+    const videoDescription = description || `Video for project: ${video.project_id.name}\n\nCreated with YT Editor Hub.`;
+    const statusMetadata = {
+      privacyStatus: privacyStatus || 'private', // 'public' | 'unlisted' | 'private'
+      selfDeclaredMadeForKids: madeForKids === 'true' || madeForKids === true
+    };
 
     // Upload to YouTube
     const uploadResponse = await youtube.videos.insert({
-      part: ["snippet", "status"],
+      part: ['snippet', 'status'],
       requestBody: {
         snippet: {
           title: videoTitle,
           description: videoDescription,
-          tags: ["youtube", "editor", "collaboration", "video", "content"],
-          categoryId: "22", // People & Blogs category
-          defaultLanguage: "en",
-          defaultAudioLanguage: "en"
+          tags: ['youtube', 'editor', 'collaboration'],
+          categoryId: '22',
+          defaultLanguage: 'en',
+          defaultAudioLanguage: 'en'
         },
-        status: {
-          privacyStatus: "private", // Options: "private", "public", "unlisted"
-          selfDeclaredMadeForKids: false,
-          embeddable: true,
-          publicStatsViewable: true
-        },
+        status: statusMetadata
       },
-      media: {
-        body: videoStream,
-      },
+      media: { body: videoStream }
     });
 
     const youtubeVideoId = uploadResponse.data.id;
-    const youtubeUrl = `https://www.youtube.com/watch?v=${youtubeVideoId}`;
-    
-    console.log("YouTube upload successful!");
-    console.log("YouTube Video ID:", youtubeVideoId);
-    console.log("YouTube URL:", youtubeUrl);
 
-    // Update video record with YouTube information
+    // Optionally set custom thumbnail if provided
+    if (thumbnailUrl) {
+      // Download thumbnail image
+      const thumbResp = await fetch(thumbnailUrl);
+      if (thumbResp.ok) {
+        const thumbBuffer = await thumbResp.arrayBuffer();
+        const thumbStream = Readable.from(Buffer.from(thumbBuffer));
+        await youtube.thumbnails.set({
+          videoId: youtubeVideoId,
+          media: { body: thumbStream }
+        });
+      }
+    }
+
+    // Update local record
     video.youtube_video_id = youtubeVideoId;
     video.youtube_title = videoTitle;
     video.youtube_description = videoDescription;
     video.uploaded_to_youtube = true;
     video.youtube_upload_date = new Date();
+    video.youtube_visibility = statusMetadata.privacyStatus;
+    video.youtube_madeForKids = statusMetadata.selfDeclaredMadeForKids;
     await video.save();
-
-    console.log("Database updated successfully");
 
     res.status(200).json({ 
       success: true,
-      message: "Video uploaded to YouTube successfully!",
       videoId: youtubeVideoId,
-      videoUrl: youtubeUrl,
-      title: videoTitle,
-      uploadDate: new Date().toISOString()
+      videoUrl: `https://www.youtube.com/watch?v=${youtubeVideoId}`
     });
 
   } catch (err) {
     console.error("YouTube upload error:", err);
-    
-    // Provide more specific error messages based on error type
-    let errorMessage = "Failed to upload video to YouTube";
     let statusCode = 500;
-    
+    let errorMessage = "Failed to upload video to YouTube";
     if (err.message.includes('quota')) {
-      errorMessage = "YouTube API quota exceeded. Please try again later.";
       statusCode = 429;
-    } else if (err.message.includes('authentication') || err.message.includes('credential')) {
-      errorMessage = "YouTube authentication failed. Please sign out and sign in again.";
-      statusCode = 401;
-    } else if (err.message.includes('fetch') || err.message.includes('Cloudinary')) {
-      errorMessage = "Failed to download video from cloud storage. Please ensure the video file exists and is accessible.";
-      statusCode = 422;
-    } else if (err.message.includes('forbidden') || err.message.includes('403')) {
-      errorMessage = "YouTube upload forbidden. Your account may not have upload permissions or may need verification.";
-      statusCode = 403;
-    } else if (err.message.includes('invalid')) {
-      errorMessage = "Invalid video format or corrupted file. Please re-upload the video.";
-      statusCode = 422;
+      errorMessage = "YouTube API quota exceeded.";
     }
-    
-    res.status(statusCode).json({ 
-      success: false,
-      error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
-      timestamp: new Date().toISOString()
+    res.status(statusCode).json({ success: false, error: errorMessage });
+  }
+};
+
+
+// Clodinary Sign to frontend
+export const cloudinarySign = (req, res) => {
+  const timestamp = Math.round(Date.now() / 1000);
+  const signature = cloudinary.utils.api_sign_request(
+    { timestamp },
+    process.env.CLOUDINARY_API_SECRET
+  );
+  res.json({
+    timestamp,
+    signature,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME
+  });
+}
+
+// Signed upload to cloudinary
+export const signedDataUpdate = async (req, res) => {
+  try {
+    const { project_id, assigned_to, public_id, url, thumbnail_url } = req.body;
+
+    const video = new Video({
+      project_id,
+      uploaded_by: req.user._id,
+      assigned_to,
+      s3_key: url,
+      cloudinary_public_id: public_id,
+      youtube_thumbnail_url: thumbnail_url
     });
+
+    await video.save();
+    res.status(201).json(video);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 };

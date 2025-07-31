@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { Users, LogOut, Video, Eye, Edit, Play, ChevronDown, ChevronUp } from 'lucide-react';
 import {StatusBadge} from './StatusBadge';
 import api from '../utils/api';
+
 
 export const EditorDashboard = ({ user, onLogout }) => {
   const [projects, setProjects] = useState([]);
@@ -18,7 +20,7 @@ export const EditorDashboard = ({ user, onLogout }) => {
       const reversedProjects = data.projects.reverse();
       setProjects(reversedProjects);
     } catch (error) {
-      console.error('Failed to load projects:', error);
+      console.error("Failed to load projects:", error);
     }
   };
 
@@ -30,9 +32,10 @@ export const EditorDashboard = ({ user, onLogout }) => {
         [projectId]: data.videos
       }));
     } catch (error) {
-      console.error('Failed to load project videos:', error);
+      console.error("Failed to load project videos:", error);
     }
   };
+
 
   const handleProjectClick = async (projectId) => {
     if (expandedProject === projectId) {
@@ -45,12 +48,14 @@ export const EditorDashboard = ({ user, onLogout }) => {
     }
   };
 
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
       {/* Header */}
       <header className="bg-gray-900/50 backdrop-blur-sm border-b border-gray-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
+
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center">
                 <Edit className="h-6 w-6 text-white" />
@@ -59,6 +64,7 @@ export const EditorDashboard = ({ user, onLogout }) => {
                 <h1 className="text-2xl font-bold text-white">Editor Dashboard</h1>
                 <p className="text-gray-400 text-sm">Edit and review video projects</p>
               </div>
+
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
@@ -77,11 +83,13 @@ export const EditorDashboard = ({ user, onLogout }) => {
         </div>
       </header>
 
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {projects.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Users className="h-10 w-10 text-white" />
+
             </div>
             <h3 className="text-2xl font-bold text-white mb-3">No Assigned Projects</h3>
             <p className="text-gray-400">Projects will appear here when creators assign them to you</p>
@@ -92,6 +100,7 @@ export const EditorDashboard = ({ user, onLogout }) => {
               <h2 className="text-2xl font-bold text-white mb-2">Assigned Projects</h2>
               <p className="text-gray-400">Click on any project to view and edit its videos</p>
             </div>
+
 
             {projects.map((project) => (
               <div
@@ -123,6 +132,7 @@ export const EditorDashboard = ({ user, onLogout }) => {
                         <p className="text-sm text-gray-400">
                           {projectVideos[project._id]?.length || 0} videos
                         </p>
+
                       </div>
                       {expandedProject === project._id ? (
                         <ChevronUp className="h-5 w-5 text-gray-400" />
@@ -132,6 +142,7 @@ export const EditorDashboard = ({ user, onLogout }) => {
                     </div>
                   </div>
                 </div>
+
 
                 {/* Expanded Content */}
                 {expandedProject === project._id && (
@@ -206,6 +217,7 @@ export const EditorDashboard = ({ user, onLogout }) => {
                 )}
               </div>
             ))}
+
           </div>
         )}
       </div>

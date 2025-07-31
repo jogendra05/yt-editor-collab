@@ -5,14 +5,12 @@ async function authMiddleware(req, res, next) {
   try {
     const auth = req.headers.authorization || '';
     const [, token] = auth.split(' ');
-    
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
     const { sub } = verifyAccessToken(token);
     const user = await User.findById(sub);
-    
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
