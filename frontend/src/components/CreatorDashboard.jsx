@@ -21,10 +21,8 @@ export const CreatorDashboard = ({ user, onLogout }) => {
   const loadCreatorProjects = async () => {
     try {
       const data = await api.getCreatorProjects();
-      const sortedProjects = [...data.projects].sort((a, b) => {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      });
-    setProjects(sortedProjects);
+      const sortedProjects = data.projects.reverse()
+      setProjects(sortedProjects)
     } catch (error) {
       console.error('Failed to load projects:', error);
     }

@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Users, LogOut, Video, Eye, Edit, Play, ChevronDown, ChevronUp } from 'lucide-react';
 import {StatusBadge} from './StatusBadge';
+import { VideoPreviewPage } from './VideoPreviewPage';
 import api from '../utils/api';
 
 
@@ -9,16 +9,41 @@ export const EditorDashboard = ({ user, onLogout }) => {
   const [projects, setProjects] = useState([]);
   const [expandedProject, setExpandedProject] = useState(null);
   const [projectVideos, setProjectVideos] = useState({});
+  const [currentView, setCurrentView] = useState('dashboard');
+  const [selectedVideoId, setSelectedVideoId] = useState(null);
 
   useEffect(() => {
     loadEditorProjects();
   }, []);
 
+  const handlePreviewEditedVideo = (videoId) => {
+    setSelectedVideoId(videoId);
+    setCurrentView('video-preview');
+  };
+
+  const handleBackToDashboard = () => {
+    setCurrentView('dashboard');
+    setSelectedVideoId(null);
+  };
+
+  // Show video preview page if selected
+  if (currentView === 'video-preview') {
+    return (
+      <VideoPreviewPage
+        videoId={selectedVideoId}
+        onBack={handleBackToDashboard}
+        user={user}
+      />
+    );
+  }
+
+
+
   const loadEditorProjects = async () => {
     try {
       const data = await api.getEditorProjects();
-      const reversedProjects = data.projects.reverse();
-      setProjects(reversedProjects);
+      const sortedProjects = data.projects.reverse()
+      setProjects(sortedProjects);
     } catch (error) {
       console.error("Failed to load projects:", error);
     }
@@ -191,7 +216,7 @@ export const EditorDashboard = ({ user, onLogout }) => {
                                     <span>Ready for editing</span>
                                   </div>
                                   <div className="flex gap-2">
-                                    <button className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium transition-all">
+                                    <button onClick={() => handlePreviewEditedVideo(video._id)} className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium transition-all">
                                       <Edit className="h-4 w-4" />
                                       Start Editing
                                     </button>
