@@ -7,6 +7,87 @@ export const VideoPreviewPage = ({ videoId, onBack, user }) => {
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isRequestingChanges, setIsRequestingChanges] = useState(false);
+  const [showChangeModal, setShowChangeModal] = useState(false);
+  const [changesFeedback, setChangesFeedback] = useState('');
+  const [formData, setFormData] = useState({
+  title: '',
+  description: '',
+  tags: ''
+  });
+
+  useEffect(() => {
+    if (video) {
+      setFormData({
+        title: video.title || '',
+        description: video.description || '',
+        tags: video.tags?.join(', ') || ''
+      });
+    }
+  }, [video]);
+
+  // Handle input changes
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Save Changes function
+  const handleSaveChanges = async () => {
+    try {
+      setIsUpdating(true);
+      
+      const updateData = {
+        title: formData.title,
+        description: formData.description,
+        tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+      };
+
+      await api.updateVideoDetails(videoId, updateData);
+      
+      // Show success message or toast
+      alert('Video details updated successfully!');
+      
+      // Optionally reload video details
+      await loadVideoDetails();
+      
+    } catch (error) {
+      console.error('Failed to update video:', error);
+      alert('Failed to update video details: ' + error.message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Request Changes function
+  const handleRequestChanges = async () => {
+    if (!changesFeedback.trim()) {
+      alert('Please provide feedback for the changes requested.');
+      return;
+    }
+
+    try {
+      setIsRequestingChanges(true);
+      
+      await api.requestVideoChanges(videoId, changesFeedback);
+      
+      // Show success message
+      alert('Changes requested successfully!');
+      
+      // Close modal and reset
+      setShowChangeModal(false);
+      setChangesFeedback('');
+      
+      // Reload video details to show updated status
+      await loadVideoDetails();
+      
+    } catch (error) {
+      console.error('Failed to request changes:', error);
+      alert('Failed to request changes: ' + error.message);
+    } finally {
+      setIsRequestingChanges(false);
+    }
+  };
 
   useEffect(() => {
     loadVideoDetails();
@@ -138,9 +219,13 @@ export const VideoPreviewPage = ({ videoId, onBack, user }) => {
                       <Share2 className="h-4 w-4" />
                       Share
                     </button>
-                    <button className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium transition-all">
+                    <button 
+                      onClick={() => setShowChangeModal(true)}
+                      className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium transition-all"
+                      disabled={isRequestingChanges}
+                    >
                       <Edit className="h-4 w-4" />
-                      Request Changes
+                      {isRequestingChanges ? 'Requesting...' : 'Request Changes'}
                     </button>
                   </div>
                 </div>
@@ -162,7 +247,8 @@ export const VideoPreviewPage = ({ videoId, onBack, user }) => {
                   <label className="block text-sm font-medium text-gray-400 mb-2">Title</label>
                   <input
                     type="text"
-                    value={video.title || 'Untitled Video'}
+                    value={formData.title}
+                    onChange={(e) => handleInputChange('title', e.target.value)}
                     className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none"
                     placeholder="Enter video title..."
                   />
@@ -171,7 +257,8 @@ export const VideoPreviewPage = ({ videoId, onBack, user }) => {
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-2">Description</label>
                   <textarea
-                    value={video.description || ''}
+                    value={formData.description}
+                    onChange={(e) => handleInputChange('description', e.target.value)}
                     rows={4}
                     className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none resize-none"
                     placeholder="Enter video description..."
@@ -179,17 +266,21 @@ export const VideoPreviewPage = ({ videoId, onBack, user }) => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Tags</label>
                   <input
                     type="text"
-                    value={video.tags?.join(', ') || ''}
+                    value={formData.tags}
+                    onChange={(e) => handleInputChange('tags', e.target.value)}
                     className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none"
                     placeholder="Enter tags separated by commas..."
                   />
                 </div>
 
-                <button className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white py-2 rounded-lg font-medium transition-all">
-                  Save Changes
+                <button 
+                  onClick={handleSaveChanges}
+                  disabled={isUpdating}
+                  className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUpdating ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>
@@ -254,6 +345,45 @@ export const VideoPreviewPage = ({ videoId, onBack, user }) => {
           </div>
         </div>
       </div>
+      {showChangeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-2xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-xl font-semibold text-white mb-4">Request Changes</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-400 mb-2">
+                Feedback for Editor
+              </label>
+              <textarea
+                value={changesFeedback}
+                onChange={(e) => setChangesFeedback(e.target.value)}
+                rows={4}
+                className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-3 py-2 text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none resize-none"
+                placeholder="Please describe the changes you'd like to see..."
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowChangeModal(false);
+                  setChangesFeedback('');
+                }}
+                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 rounded-lg font-medium transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestChanges}
+                disabled={isRequestingChanges || !changesFeedback.trim()}
+                className="flex-1 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isRequestingChanges ? 'Sending...' : 'Send Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

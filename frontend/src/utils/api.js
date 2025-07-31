@@ -86,6 +86,21 @@ const getVideoDetails = async (videoId) => {
   return await request(`/api/videos/${videoId}`); //////////////////
 };
 
+const updateVideoDetails = async (videoId, videoData) => {
+  return await request(`/api/videos/${videoId}`, {
+    method: 'PUT',
+    body: JSON.stringify(videoData),
+  });
+};
+
+const requestVideoChanges = async (videoId, feedback) => {
+  return await request(`/api/videos/${videoId}/request-changes`, {
+    method: 'POST',
+    body: JSON.stringify({ feedback }),
+  });
+};
+
+
 // Exporting all API methods as one object
 const api = {
   request,
@@ -100,6 +115,8 @@ const api = {
   logout,
   uploadToYouTube,
   getVideoDetails,
+  updateVideoDetails,  
+  requestVideoChanges, 
 };
 
 export default api;
