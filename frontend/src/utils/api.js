@@ -11,7 +11,7 @@ const request = async (url, options = {}) => {
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
-
+  console.log('Making request to:', `${API_BASE_URL}${url}`, 'with options:', options);
   const response = await fetch(`${API_BASE_URL}${url}`, { 
     ...options, 
     headers 
