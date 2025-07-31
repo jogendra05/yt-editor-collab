@@ -82,6 +82,10 @@ const uploadToYouTube = async (videoId, title, description) => {
   });
 };
 
+const getVideoDetails = async (videoId) => {
+  return await request(`/api/videos/${videoId}`); //////////////////
+};
+
 // Exporting all API methods as one object
 const api = {
   request,
@@ -95,6 +99,7 @@ const api = {
   getCreatorProjects,
   logout,
   uploadToYouTube,
+  getVideoDetails,
 };
 
 export default api;
