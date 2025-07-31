@@ -6,6 +6,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/
 import { v2 as cloudinary } from 'cloudinary';
 import {notifyOnUpload} from "../utils/sendEmail.js";
 import { uploadToCloudinary } from "../middleware/cloudinaryUpload.js";
+import { COOKIE_OPTIONS } from "../utils/cookie.js";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -45,17 +46,12 @@ export const creatorAuth = async (req, res) => {
 export const creatorCallback = async (req, res) => {
   try {
     const { code, state: role } = req.query;
-    
-    if (!role) {
-      return res.status(400).send("Role not specified");
-    }
-    
+    if (!role) return res.status(400).send("Role not specified");
+
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
-    const userInfo = await oauth2.userinfo.get();
-    const email = userInfo.data.email;
+    const { data: { email } } = await google.oauth2({version:'v2', auth: oauth2Client}).userinfo.get();
 
     const user = await User.findOneAndUpdate(
       { email },
@@ -67,14 +63,17 @@ export const creatorCallback = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    const accessToken = signAccessToken({ sub: user._id });
+    const accessToken  = signAccessToken({ sub: user._id });
     const refreshToken = signRefreshToken({ sub: user._id });
 
+    // persist refresh in DB
     user.refresh_token = { token: refreshToken, createdAt: Date.now() };
     await user.save();
 
-    // Redirect to frontend with token
-    res.redirect(`http://localhost:5173/?token=${accessToken}`);
+    res
+      .cookie("yt_access",  accessToken,  { ...COOKIE_OPTIONS, maxAge: 15 * 60 * 1000 })
+      .cookie("yt_refresh", refreshToken, { ...COOKIE_OPTIONS, maxAge: 7 * 24 * 60 * 60 * 1000 })
+      .redirect(`http://localhost:5173`);
   } catch (error) {
     console.error("Error during OAuth callback:", error);
     res.status(500).send("Authentication failed. Please try again.");
@@ -83,48 +82,52 @@ export const creatorCallback = async (req, res) => {
 
 export const rotateRefreshToken = async (req, res) => {
   try {
-    const token = req.cookies.yteditor;
-    if (!token) return res.status(401).json({ success: false, accessToken: "" });
+    const oldToken = req.cookies.yt_refresh;
+    if (!oldToken) return res.status(401).json({ success: false, accessToken: "" });
 
     let payload;
     try {
-      payload = verifyRefreshToken(token);
+      payload = verifyRefreshToken(oldToken);
     } catch {
       return res.status(403).json({ success: false, accessToken: "" });
     }
 
     const user = await User.findById(payload.sub);
-    if (!user || user.refresh_token.token !== token) {
+    if (!user || user.refresh_token.token !== oldToken) {
       return res.status(403).json({ success: false, accessToken: "" });
     }
 
-    const newAccessToken = signAccessToken({ sub: user._id });
-    const newRefreshToken = signRefreshToken({ sub: user._id });
+    // generate new tokens
+    const newAccess  = signAccessToken({ sub: user._id });
+    const newRefresh = signRefreshToken({ sub: user._id });
 
-    user.refresh_token = { token: newRefreshToken, createdAt: Date.now() };
+    // rotate in DB
+    user.refresh_token = { token: newRefresh, createdAt: Date.now() };
     await user.save();
 
     res
-      .cookie("yteditor", newRefreshToken, {
-        httpOnly: true,
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      })
-      .json({ accessToken: newAccessToken });
+      .cookie("yt_access",  newAccess,  { ...COOKIE_OPTIONS, maxAge: 15 * 60 * 1000 })
+      .cookie("yt_refresh", newRefresh, { ...COOKIE_OPTIONS, maxAge: 7 * 24 * 60 * 60 * 1000 })
+      .json({ success: true, accessToken: newAccess });
   } catch (error) {
     console.error("Error rotating refresh token:", error);
-    return res.status(500).json({ success: false, accessToken: "" });
+    res.status(500).json({ success: false, accessToken: "" });
   }
 };
 
 export const logout = async (req, res) => {
-  const token = req.cookies.yteditor;
+  const token = req.cookies.yt_refresh;
   if (token) {
     try {
-      const payload = verifyRefreshToken(token);
-      await User.findByIdAndUpdate(payload.sub, { $unset: { refresh_token: '' } });
-    } catch {}
+      const { sub } = verifyRefreshToken(token);
+      await User.findByIdAndUpdate(sub, { $unset: { refresh_token: "" } });
+    } catch { /* ignore invalid token */ }
   }
-  res.clearCookie('yteditor').json({ message: 'Logged out' });
+
+  res
+    .clearCookie("yt_access",  COOKIE_OPTIONS)
+    .clearCookie("yt_refresh", COOKIE_OPTIONS)
+    .json({ message: "Logged out" });
 };
 
 export const getUserInfo = async (req, res) => {

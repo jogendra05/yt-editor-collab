@@ -1,48 +1,49 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const request = async (url, options = {}) => {
-  const token = localStorage.getItem('accessToken');
-  const headers = {
-    ...options.headers,
-    Authorization: token ? `Bearer ${token}` : '',
+  const fetchOptions = {
+    ...options,
+    credentials: 'include',
+    headers: {
+      ...options.headers,
+    }
   };
 
-  // Don't set Content-Type for FormData - browser will set it with boundary
+  // Only add Content-Type if not sending FormData
   if (!(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
-  }
-  console.log('Making request to:', `${API_BASE_URL}${url}`, 'with options:', options);
-  const response = await fetch(`${API_BASE_URL}${url}`, { 
-    ...options, 
-    headers 
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `Request failed with status ${response.status}`);
+    fetchOptions.headers['Content-Type'] = 'application/json';
   }
 
-  return await response.json();
+  // console.log('→', `${API_BASE_URL}${url}`, fetchOptions);
+  const res = await fetch(`${API_BASE_URL}${url}`, fetchOptions);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Request failed with status ${res.status}`);
+  }
+  return res.json();
 };
 
+// When 401 from access_token happens, call this to rotate via refresh_token cookie
 const refreshToken = async () => {
+  // your backend endpoint to rotate should read yt_refresh cookie,
+  // issue new yt_access (and possibly new yt_refresh) in its response cookies
   return await request('/api/refresh-token', { method: 'POST' });
 };
 
-
 const signIn = (role) => {
-  window.location.href = `${API_BASE_URL}/api/sign-in?role=${role}`; 
-}
+  // kicks off OAuth—after callback your cookies get set
+  window.location.href = `${API_BASE_URL}/api/sign-in?role=${role}`;
+};
 
 const getUserInfo = async () => {
   return await request('/api/me');
 };
 
-// Fixed: Handle FormData properly
 const createProject = async (formData) => {
   return await request('/api/projects', {
     method: 'POST',
-    body: formData, // Don't stringify FormData
+    body: formData, // leave as FormData
   });
 };
 
@@ -50,7 +51,6 @@ const getProjectVideos = async (projectId) => {
   return await request(`/api/projects/${projectId}/videos`);
 };
 
-// Fixed: Add missing action parameter
 const approveVideo = async (videoId, action) => {
   return await request(`/api/videos/${videoId}/approve`, {
     method: 'PUT',
@@ -62,7 +62,6 @@ const getEditorProjects = async () => {
   return await request('/api/editor/projects');
 };
 
-// Add missing method for loading creator projects
 const getCreatorProjects = async () => {
   return await request('/api/projects');
 };
@@ -74,8 +73,8 @@ const logout = async () => {
 const uploadToYouTube = async (videoId, title, description) => {
   return await request('/api/videos/upload-to-youtube', {
     method: 'POST',
-    body: JSON.stringify({ 
-      videoId, 
+    body: JSON.stringify({
+      videoId,
       title: title || 'Untitled Video',
       description: description || 'Uploaded via YT Editor Hub'
     }),
@@ -83,7 +82,7 @@ const uploadToYouTube = async (videoId, title, description) => {
 };
 
 const getVideoDetails = async (videoId) => {
-  return await request(`/api/videos/${videoId}`); //////////////////
+  return await request(`/api/videos/${videoId}`);
 };
 
 const updateVideoDetails = async (videoId, videoData) => {
@@ -100,9 +99,7 @@ const requestVideoChanges = async (videoId, feedback) => {
   });
 };
 
-
-// Exporting all API methods as one object
-const api = {
+export default {
   request,
   refreshToken,
   signIn,
@@ -115,8 +112,6 @@ const api = {
   logout,
   uploadToYouTube,
   getVideoDetails,
-  updateVideoDetails,  
-  requestVideoChanges, 
+  updateVideoDetails,
+  requestVideoChanges,
 };
-
-export default api;
