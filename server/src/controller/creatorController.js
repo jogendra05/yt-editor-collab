@@ -161,12 +161,23 @@ export const createProject = async (req, res) => {
     );
 
     // Save the video
+    // const video = await Video.create({
+    //   project_id: project._id,
+    //   uploaded_by: req.userId,
+    //   assigned_to: editor._id,
+    //   s3_key: req.file.path, // Cloudinary URL
+    //   cloudinary_public_id:  req.file.filename,
+    //   status: "pending"
+    // });
+    // Upload to Cloudinary manually
+    const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
+
+    // Save the video
     const video = await Video.create({
       project_id: project._id,
       uploaded_by: req.userId,
       assigned_to: editor._id,
-      s3_key: req.file.path, // Cloudinary URL
-      cloudinary_public_id:  req.file.filename,
+      s3_key: cloudinaryResult.secure_url, // cloudinary URL
       status: "pending"
     });
 
