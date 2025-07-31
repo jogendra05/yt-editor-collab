@@ -168,9 +168,10 @@ export const createProject = async (req, res) => {
     //   uploaded_by: req.userId,
     //   assigned_to: editor._id,
     //   s3_key: req.file.path, // Cloudinary URL
-    //   cloudinary_public_id:  req.file.filename,
     //   status: "pending"
     // });
+
+
     // Upload to Cloudinary manually
     const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
 
