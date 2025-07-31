@@ -12,7 +12,9 @@ import {
   getProjectVideos,
   approveVideo,
   getCreatorProjects,
-  uploadToYouTube
+  uploadToYouTube,
+  cloudinarySign,
+  signedDataUpdate
 } from "../controller/creatorController.js";
 
 const creatorRouter = express.Router();
@@ -32,5 +34,7 @@ creatorRouter.get("/editor/projects", authMiddleware, editorProjects);
 creatorRouter.post("/invite/accept", authMiddleware, editorAcceptInvite);
 creatorRouter.post("/videos/upload-to-youtube", authMiddleware, uploadToYouTube);
 
+creatorRouter.get("/cloudinary-sign", authMiddleware, cloudinarySign);
+creatorRouter.post("/signed-data", authMiddleware, signedDataUpdate);
 
 export default creatorRouter;

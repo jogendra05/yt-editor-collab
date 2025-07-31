@@ -46,17 +46,29 @@ const videoSchema = new mongoose.Schema({
   uploaded_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   assigned_to: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   s3_key: { type: String, required: true }, // Cloudinary URL or S3 key
+  cloudinary_public_id: String,
   status: {
     type: String,
     enum: ["pending", "approved", "changes_requested"],
     default: "pending"
   },
   // YouTube-related fields
-  youtube_video_id: { type: String }, // YouTube video ID after upload
-  youtube_title: { type: String }, // Title used when uploading to YouTube
-  youtube_description: { type: String }, // Description used when uploading to YouTube
+  youtube_video_id: { type: String },               // YouTube video ID after upload
+  youtube_title: { type: String },                  // Title used when uploading to YouTube
+  youtube_description: { type: String },            // Description used when uploading to YouTube
   uploaded_to_youtube: { type: Boolean, default: false },
-  youtube_upload_date: { type: Date },
+  youtube_upload_date: { type: Date },              // Date of upload
+  youtube_visibility: {                              
+    type: String,
+    enum: ["public", "unlisted", "private"],
+    default: "private"
+  }, // Visibility status on YouTube
+  youtube_madeForKids: { type: Boolean, default: false }, 
+  youtube_thumbnail_url: { type: String },           // Custom thumbnail URL if set
+
+  edited_s3_key: { type: String },                  // Cloudinary URL or S3 key
+  edited_cloudinary_public_id: { type: String },
+  edited_at: { type: Date },
   created_at: { type: Date, default: Date.now }
 });
 

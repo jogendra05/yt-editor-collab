@@ -23,8 +23,11 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
       data.append('name', formData.name);
       data.append('editorEmail', formData.editorEmail);
       data.append('video', formData.video);
-
+      console.log('Submitting project data:', data);
+      
       const result = await api.createProject(data);
+      console.log(result)
+      console.log(result.project)
       onSuccess(result.project);
     } catch (error) {
       console.error('Failed to create project:', error);
