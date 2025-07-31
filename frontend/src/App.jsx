@@ -2,47 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { LoginPage } from './components/LoginPage';
 import { CreatorDashboard } from './components/CreatorDashboard';
 import { EditorDashboard } from './components/EditorDashboard';
-import { LandingPage } from './components/LandingPage'; // ✅ import it
+import { LandingPage } from './components/LandingPage';
 import api from './utils/api.js';
 
 const App = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showLanding, setShowLanding] = useState(true); // ✅ state for landing
+  const [showLanding, setShowLanding] = useState(true);
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-          const data = await api.getUserInfo();
-          setUser(data.user);
-        }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        localStorage.removeItem('accessToken');
+        const { user } = await api.getUserInfo();
+        setUser(user);
+      } catch (err) {
+        setUser(null);
       } finally {
         setLoading(false);
       }
     };
 
     checkAuth();
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    if (token) {
-      localStorage.setItem('accessToken', token);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      checkAuth();
-    }
   }, []);
 
   const handleLogout = async () => {
     try {
       await api.logout();
-      localStorage.removeItem('accessToken');
       setUser(null);
-      setShowLanding(true); // ✅ return to landing on logout
+      setShowLanding(true);
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -61,18 +48,18 @@ const App = () => {
   }
 
   if (!user) {
-    return <LoginPage onLogin={setUser} />;
+    return <LoginPage />;
   }
 
   if (user.role === 'creator') {
     return <CreatorDashboard user={user} onLogout={handleLogout} />;
   }
-
   if (user.role === 'editor') {
     return <EditorDashboard user={user} onLogout={handleLogout} />;
   }
 
-  return <LoginPage onLogin={setUser} />;
+  // Fallback
+  return <LoginPage />;
 };
 
 export default App;
