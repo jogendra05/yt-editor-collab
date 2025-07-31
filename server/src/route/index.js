@@ -13,8 +13,9 @@ import {
   approveVideo,
   getCreatorProjects,
   uploadToYouTube,
-  cloudinarySign,
-  signedDataUpdate
+  loadVideoDetails,
+  updateVideoDetails,
+  requestVideoChanges
 } from "../controller/creatorController.js";
 
 const creatorRouter = express.Router();
@@ -34,7 +35,12 @@ creatorRouter.get("/editor/projects", authMiddleware, editorProjects);
 creatorRouter.post("/invite/accept", authMiddleware, editorAcceptInvite);
 creatorRouter.post("/videos/upload-to-youtube", authMiddleware, uploadToYouTube);
 
-creatorRouter.get("/cloudinary-sign", authMiddleware, cloudinarySign);
-creatorRouter.post("/signed-data", authMiddleware, signedDataUpdate);
+// creatorRouter.get("/cloudinary-sign", authMiddleware, cloudinarySign);
+// creatorRouter.post("/signed-data", authMiddleware, signedDataUpdate);
+// Video management routes
+creatorRouter.get("/videos/:videoId", authMiddleware, loadVideoDetails);
+creatorRouter.put("/videos/:videoId", authMiddleware, updateVideoDetails);
+creatorRouter.post("/videos/:videoId/request-changes", authMiddleware, requestVideoChanges);
+
 
 export default creatorRouter;

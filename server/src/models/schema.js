@@ -49,7 +49,7 @@ const videoSchema = new mongoose.Schema({
   cloudinary_public_id: String,
   status: {
     type: String,
-    enum: ["pending", "approved", "changes_requested", "editingComplete"],
+    enum: ["pending", "approved", "changes_requested", "Completed"],
     default: "pending"
   },
   // YouTube-related fields
@@ -69,6 +69,18 @@ const videoSchema = new mongoose.Schema({
   edited_s3_key: { type: String },                  // Cloudinary URL or S3 key
   edited_cloudinary_public_id: { type: String },
   edited_at: { type: Date },
+  created_at: { type: Date, default: Date.now },
+  //additional feilds
+  file_size: { type: Number },                      // File size in bytes
+  duration: { type: String },                       // Video duration (e.g., "5:30")
+  format: { type: String, default: "MP4" },         // Video format
+  resolution: { type: String, default: "1080p" },   // Video resolution
+  tags: [{ type: String }],                         // Video tags
+  
+  // Feedback and changes
+  feedback: { type: String },                       // Feedback when changes are requested
+  changes_requested_at: { type: Date },             // When changes were requested
+  
   created_at: { type: Date, default: Date.now }
 });
 

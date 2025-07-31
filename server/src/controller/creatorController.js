@@ -274,7 +274,7 @@ export const getCreatorProjects = async (req, res) => {
   try {
     const projects = await Project.find({ creator_id: req.userId })
       .populate('creator_id', 'email')
-      .sort({ _id: -1 });
+      .sort({ createdAt: -1 }); // Sort by creation time (newest first)
     
     res.json({ projects });
   } catch (error) {
@@ -290,7 +290,8 @@ export const editorProjects = async (req, res) => {
     const projectIds = invites.map(invite => invite.project_id);
     
     const projects = await Project.find({ _id: { $in: projectIds } })
-      .populate("creator_id", "email");
+      .populate("creator_id", "email")
+      .sort({ createdAt: -1 }); // Sort by creation time (newest first)
     
     res.json({ projects });
   } catch (error) {
@@ -298,6 +299,7 @@ export const editorProjects = async (req, res) => {
     res.status(500).json({ message: "Something went wrong" });
   }
 };
+
 
 export const editorAcceptInvite = async (req, res) => {
   try {
@@ -459,53 +461,256 @@ export const uploadToYouTube = async (req, res) => {
 
 
 // Clodinary Sign to frontend
-export const cloudinarySign = (req, res) => {
-  const timestamp = Math.round(Date.now() / 1000);
-  const signature = cloudinary.utils.api_sign_request(
-    { timestamp },
-    process.env.CLOUDINARY_API_SECRET
-  );
-  res.json({
-    timestamp,
-    signature,
-    apiKey: process.env.CLOUDINARY_API_KEY,
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME
-  });
-}
+// export const cloudinarySign = (req, res) => {
+//   const timestamp = Math.round(Date.now() / 1000);
+//   const signature = cloudinary.utils.api_sign_request(
+//     { timestamp },
+//     process.env.CLOUDINARY_API_SECRET
+//   );
+//   res.json({
+//     timestamp,
+//     signature,
+//     apiKey: process.env.CLOUDINARY_API_KEY,
+//     cloudName: process.env.CLOUDINARY_CLOUD_NAME
+//   });
+// }
 
-// Signed upload to cloudinary
-export const signedDataUpdate = async (req, res) => {
+// // Signed upload to cloudinary
+// export const signedDataUpdate = async (req, res) => {
+//   try {
+//     const { project_id, assigned_to, public_id, url, thumbnail_url } = req.body;
+
+//     const video = new Video({
+//       project_id,
+//       uploaded_by: req.user._id,
+//       assigned_to,
+//       s3_key: url,
+//       cloudinary_public_id: public_id,
+//       youtube_thumbnail_url: thumbnail_url,
+//       status: "Completed"
+//     });
+
+//     const project = await Project.findById(project_id).populate("creator_id", "email");
+
+//     if (!project) {
+//       console.error(`Project not found: ${project_id}`);
+//       return res.status(201).json(video);
+//     }
+
+//     await video.save();
+//     // notifyOnUpload({
+//     //   creatorEmail: project.creator_id.email,
+//     //   editorEmail:  req.user.email,
+//     //   videoUrl:     "google.com",
+//     //   by:           'editor'
+//     // }, res);
+
+//     res.status(201).json(video);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+// GET /api/videos/:videoId - Load video details
+export const loadVideoDetails = async (req, res) => {
   try {
-    const { project_id, assigned_to, public_id, url, thumbnail_url } = req.body;
+    const { videoId } = req.params;
 
-    const video = new Video({
-      project_id,
-      uploaded_by: req.user._id,
-      assigned_to,
-      s3_key: url,
-      cloudinary_public_id: public_id,
-      youtube_thumbnail_url: thumbnail_url,
-      status: "editingComplete"
-    });
-
-    const project = await Project.findById(project_id).populate("creator_id", "email");
-
-    if (!project) {
-      console.error(`Project not found: ${project_id}`);
-      return res.status(201).json(video);
+    // Validate videoId
+    if (!videoId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Video ID is required" 
+      });
     }
 
-    await video.save();
-    // notifyOnUpload({
-    //   creatorEmail: project.creator_id.email,
-    //   editorEmail:  req.user.email,
-    //   videoUrl:     "google.com",
-    //   by:           'editor'
-    // }, res);
+    // Find video by ID and populate related fields
+    const video = await Video.findById(videoId)
+      .populate('project_id', 'title description creator_id')
+      .populate('uploaded_by', 'email name')
+      .populate('assigned_to', 'email name')
+      .populate({
+        path: 'project_id',
+        populate: {
+          path: 'creator_id',
+          select: 'email name'
+        }
+      });
 
-    res.status(201).json(video);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    if (!video) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Video not found" 
+      });
+    }
+
+    // Transform the video data to match frontend expectations
+    const videoResponse = {
+      _id: video._id,
+      title: video.youtube_title || video.project_id?.title || 'Untitled Video',
+      description: video.youtube_description || video.project_id?.description || '',
+      status: video.status,
+      
+      // URLs for video and thumbnail
+      edited_video_url: video.edited_s3_key || video.s3_key, // Use edited version if available, fallback to original
+      thumbnail_url: video.youtube_thumbnail_url,
+      
+      // File information
+      file_size: video.file_size,
+      duration: video.duration,
+      format: video.format || 'MP4',
+      resolution: video.resolution || '1080p',
+      
+      // Cloudinary info
+      cloudinary_public_id: video.edited_cloudinary_public_id || video.cloudinary_public_id,
+      
+      // User information
+      uploaded_by: video.uploaded_by,
+      assigned_editor: video.assigned_to,
+      
+      // YouTube information
+      youtube_video_id: video.youtube_video_id,
+      uploaded_to_youtube: video.uploaded_to_youtube,
+      youtube_visibility: video.youtube_visibility,
+      youtube_madeForKids: video.youtube_madeForKids,
+      
+      // Timestamps
+      created_at: video.created_at,
+      edited_at: video.edited_at,
+      youtube_upload_date: video.youtube_upload_date,
+      
+      // Project information
+      project: {
+        _id: video.project_id?._id,
+        title: video.project_id?.title,
+        creator: video.project_id?.creator_id
+      },
+      
+      // Tags (if you want to add tags functionality)
+      tags: video.tags || []
+    };
+
+    res.status(200).json({
+      success: true,
+      video: videoResponse
+    });
+
+  } catch (error) {
+    console.error('Error loading video details:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to load video details",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// PUT /api/videos/:videoId - Update video details
+export const updateVideoDetails = async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const { 
+      title, 
+      description, 
+      tags, 
+      youtube_visibility, 
+      youtube_madeForKids 
+    } = req.body;
+
+    const video = await Video.findById(videoId);
+    
+    if (!video) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Video not found" 
+      });
+    }
+
+    // Check if user has permission to edit (either uploader or assigned editor)
+    if (video.uploaded_by.toString() !== req.user._id.toString() && 
+        video.assigned_to.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Not authorized to edit this video" 
+      });
+    }
+
+    // Update video details
+    const updateData = {};
+    if (title !== undefined) updateData.youtube_title = title;
+    if (description !== undefined) updateData.youtube_description = description;
+    if (tags !== undefined) updateData.tags = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
+    if (youtube_visibility !== undefined) updateData.youtube_visibility = youtube_visibility;
+    if (youtube_madeForKids !== undefined) updateData.youtube_madeForKids = youtube_madeForKids;
+
+    const updatedVideo = await Video.findByIdAndUpdate(
+      videoId, 
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('uploaded_by', 'email name')
+     .populate('assigned_to', 'email name');
+
+    res.status(200).json({
+      success: true,
+      message: "Video details updated successfully",
+      video: updatedVideo
+    });
+
+  } catch (error) {
+    console.error('Error updating video details:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to update video details",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// POST /api/videos/:videoId/request-changes - Request changes to video
+export const requestVideoChanges = async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const { changes_requested, feedback } = req.body;
+
+    const video = await Video.findById(videoId)
+      .populate('project_id', 'creator_id')
+      .populate('assigned_to', 'email');
+
+    if (!video) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Video not found" 
+      });
+    }
+
+    // Update video status
+    video.status = 'changes_requested';
+    video.feedback = feedback;
+    video.changes_requested_at = new Date();
+    
+    await video.save();
+
+    // You can add notification logic here similar to your signedDataUpdate function
+    // notifyOnChangesRequested({
+    //   editorEmail: video.assigned_to.email,
+    //   creatorEmail: video.project_id.creator_id.email,
+    //   feedback: feedback,
+    //   videoUrl: video.s3_key
+    // });
+
+    res.status(200).json({
+      success: true,
+      message: "Changes requested successfully",
+      video: video
+    });
+
+  } catch (error) {
+    console.error('Error requesting video changes:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to request changes",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
