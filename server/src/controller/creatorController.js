@@ -467,7 +467,7 @@ export const uploadToYouTube = async (req, res) => {
 export const getCloudinarySignature = (req, res) => {
   const timestamp = Math.round(Date.now() / 1000);
   const signature = cloudinary.utils.api_sign_request(
-    { timestamp, folder: 'yt-editor' }, // you can add more params if needed
+    { timestamp, folder: 'youtube-editor-videos' }, // you can add more params if needed
     process.env.CLOUDINARY_API_SECRET
   );
   res.json({
@@ -475,7 +475,7 @@ export const getCloudinarySignature = (req, res) => {
     signature,
     apiKey: process.env.CLOUDINARY_API_KEY,
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-    folder: 'yt-editor'
+    folder: 'youtube-editor-videos'
   });
 };
 
@@ -518,7 +518,6 @@ export const getCloudinarySignature = (req, res) => {
 
 // GET /api/videos/:videoId - Load video details
 export const loadVideoDetails = async (req, res) => {
-  console.log("Heeeeee")
   try {
     const { videoId } = req.params;
 
@@ -549,7 +548,6 @@ export const loadVideoDetails = async (req, res) => {
         message: "Video not found" 
       });
     }
-    console.log("2")
     // Transform the video data to match frontend expectations
     const videoResponse = {
       _id: video._id,
@@ -595,7 +593,6 @@ export const loadVideoDetails = async (req, res) => {
       // Tags (if you want to add tags functionality)
       tags: video.tags || []
     };
-    console.log("hoooo")
     res.status(200).json({
       success: true,
       video: videoResponse
@@ -615,66 +612,112 @@ export const loadVideoDetails = async (req, res) => {
 export const updateVideoDetails = async (req, res) => {
   try {
     const { videoId } = req.params;
-    const { 
-      title, 
-      description, 
-      tags, 
-      youtube_visibility, 
+    const {
+      title,
+      description,
+      tags,
+      youtube_visibility,
       youtube_madeForKids,
       edited_video_url,
-      thumbnail_url
+      thumbnail_url,
     } = req.body;
 
+    // Fetch existing video
     const video = await Video.findById(videoId);
-    
     if (!video) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Video not found" 
-      });
+      return res.status(404).json({ success: false, message: 'Video not found' });
     }
 
-    // Check if user has permission to edit (either uploader or assigned editor)
-    if (video.uploaded_by.toString() !== req.user._id.toString() && 
-        video.assigned_to.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "Not authorized to edit this video" 
-      });
+    // --- Delete previous edited video on Cloudinary if uploading a new one ---
+    if (
+      edited_video_url &&
+      edited_video_url !== video.edited_s3_key &&
+      video.edited_cloudinary_public_id
+    ) {
+      try {
+        await cloudinary.uploader.destroy(
+          video.edited_cloudinary_public_id,
+          { resource_type: 'video' }
+        );
+      } catch (err) {
+        console.warn('Could not delete previous edited video:', err.message);
+      }
     }
 
-    // Update video details
+    // --- Delete previous thumbnail on Cloudinary if uploading a new one ---
+    if (
+      thumbnail_url &&
+      thumbnail_url !== video.youtube_thumbnail_url &&
+      video.edited_thumbnail_public_id
+    ) {
+      try {
+        await cloudinary.uploader.destroy(
+          video.edited_thumbnail_public_id,
+          { resource_type: 'image' }
+        );
+      } catch (err) {
+        console.warn('Could not delete previous thumbnail:', err.message);
+      }
+    }
+
+    // --- Prepare update data ---
     const updateData = {};
     if (title !== undefined) updateData.youtube_title = title;
     if (description !== undefined) updateData.youtube_description = description;
-    if (tags !== undefined) updateData.tags = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
-    if (youtube_visibility !== undefined) updateData.youtube_visibility = youtube_visibility;
-    if (youtube_madeForKids !== undefined) updateData.youtube_madeForKids = youtube_madeForKids;
-    if (edited_video_url !== undefined) updateData.edited_s3_key = edited_video_url;
-    if (thumbnail_url !== undefined) updateData.youtube_thumbnail_url = thumbnail_url;
-    
+    if (tags !== undefined) {
+      updateData.tags = Array.isArray(tags)
+        ? tags
+        : tags.split(',').map(tag => tag.trim());
+    }
+    if (youtube_visibility !== undefined)
+      updateData.youtube_visibility = youtube_visibility;
+    if (youtube_madeForKids !== undefined)
+      updateData.youtube_madeForKids = youtube_madeForKids;
+
+    // --- Handle new edited video URL & public ID (including folder) ---
+    if (edited_video_url !== undefined) {
+      updateData.edited_s3_key = edited_video_url;
+      // derive public_id from URL (assumes URL contains '/youtube-editor-videos/<public_id>.<ext>')
+      const matchVideo = edited_video_url.match(/\/(youtube-editor-videos\/[^^/.]+)\.[a-zA-Z0-9]+$/);
+      if (matchVideo) {
+        updateData.edited_cloudinary_public_id = matchVideo[1];
+      }
+    }
+
+    // --- Handle new thumbnail URL & public ID (including folder) ---
+    if (thumbnail_url !== undefined) {
+      updateData.youtube_thumbnail_url = thumbnail_url;
+      const matchThumb = thumbnail_url.match(/\/(youtube-editor-videos\/[^^/.]+)\.[a-zA-Z0-9]+$/);
+      if (matchThumb) {
+        updateData.edited_thumbnail_public_id = matchThumb[1];
+      }
+    }
+
+    // --- Execute update ---
     const updatedVideo = await Video.findByIdAndUpdate(
-      videoId, 
-      updateData,
+      videoId,
+      { $set: updateData },
       { new: true, runValidators: true }
-    ).populate('uploaded_by', 'email name')
-     .populate('assigned_to', 'email name');
+    )
+      .populate('uploaded_by', 'email name')
+      .populate('assigned_to', 'email name');
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Video details updated successfully",
-      video: updatedVideo
+      message: 'Video details updated successfully',
+      video: updatedVideo,
     });
-
   } catch (error) {
     console.error('Error updating video details:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to update video details",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update video details',
+      error:
+        process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
+
 
 // POST /api/videos/:videoId/request-changes - Request changes to video
 export const requestVideoChanges = async (req, res) => {
