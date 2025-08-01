@@ -1,15 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { Users, LogOut, Video, Eye, Edit, Play, ChevronDown, ChevronUp } from 'lucide-react';
-import {StatusBadge} from './StatusBadge';
-import { VideoPreviewPage } from './VideoPreviewPage';
-import api from '../utils/api';
-
+import React, { useState, useEffect } from "react";
+import {
+  Users,
+  LogOut,
+  Video,
+  Eye,
+  Edit,
+  Play,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import { StatusBadge } from "./StatusBadge";
+import { VideoPreviewPage } from "./VideoPreviewPage";
+import api from "../utils/api";
+import EditorUploadPage from "./editorPreviewVideo";
 
 export const EditorDashboard = ({ user, onLogout }) => {
   const [projects, setProjects] = useState([]);
   const [expandedProject, setExpandedProject] = useState(null);
   const [projectVideos, setProjectVideos] = useState({});
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentView, setCurrentView] = useState("dashboard");
   const [selectedVideoId, setSelectedVideoId] = useState(null);
 
   useEffect(() => {
@@ -18,18 +27,19 @@ export const EditorDashboard = ({ user, onLogout }) => {
 
   const handlePreviewEditedVideo = (videoId) => {
     setSelectedVideoId(videoId);
-    setCurrentView('video-preview');
+    setCurrentView("video-preview");
   };
 
   const handleBackToDashboard = () => {
-    setCurrentView('dashboard');
+    setCurrentView("dashboard");
     setSelectedVideoId(null);
   };
 
   // Show video preview page if selected
-  if (currentView === 'video-preview') {
+  if (currentView === "video-preview") {
     return (
-      <VideoPreviewPage
+      // <VideoPreviewPage
+      <EditorUploadPage
         videoId={selectedVideoId}
         onBack={handleBackToDashboard}
         user={user}
@@ -37,12 +47,10 @@ export const EditorDashboard = ({ user, onLogout }) => {
     );
   }
 
-
-
   const loadEditorProjects = async () => {
     try {
       const data = await api.getEditorProjects();
-      const sortedProjects = data.projects.reverse()
+      const sortedProjects = data.projects.reverse();
       setProjects(sortedProjects);
     } catch (error) {
       console.error("Failed to load projects:", error);
@@ -52,15 +60,14 @@ export const EditorDashboard = ({ user, onLogout }) => {
   const loadProjectVideos = async (projectId) => {
     try {
       const data = await api.getProjectVideos(projectId);
-      setProjectVideos(prev => ({
+      setProjectVideos((prev) => ({
         ...prev,
-        [projectId]: data.videos
+        [projectId]: data.videos,
       }));
     } catch (error) {
       console.error("Failed to load project videos:", error);
     }
   };
-
 
   const handleProjectClick = async (projectId) => {
     if (expandedProject === projectId) {
@@ -73,23 +80,24 @@ export const EditorDashboard = ({ user, onLogout }) => {
     }
   };
 
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
       {/* Header */}
       <header className="bg-gray-900/50 backdrop-blur-sm border-b border-gray-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
-
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center">
                 <Edit className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white">Editor Dashboard</h1>
-                <p className="text-gray-400 text-sm">Edit and review video projects</p>
+                <h1 className="text-2xl font-bold text-white">
+                  Editor Dashboard
+                </h1>
+                <p className="text-gray-400 text-sm">
+                  Edit and review video projects
+                </p>
               </div>
-
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
@@ -108,24 +116,29 @@ export const EditorDashboard = ({ user, onLogout }) => {
         </div>
       </header>
 
-
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {projects.length === 0 ? (
           <div className="text-center py-16">
             <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <Users className="h-10 w-10 text-white" />
-
             </div>
-            <h3 className="text-2xl font-bold text-white mb-3">No Assigned Projects</h3>
-            <p className="text-gray-400">Projects will appear here when creators assign them to you</p>
+            <h3 className="text-2xl font-bold text-white mb-3">
+              No Assigned Projects
+            </h3>
+            <p className="text-gray-400">
+              Projects will appear here when creators assign them to you
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-white mb-2">Assigned Projects</h2>
-              <p className="text-gray-400">Click on any project to view and edit its videos</p>
+              <h2 className="text-2xl font-bold text-white mb-2">
+                Assigned Projects
+              </h2>
+              <p className="text-gray-400">
+                Click on any project to view and edit its videos
+              </p>
             </div>
-
 
             {projects.map((project) => (
               <div
@@ -143,12 +156,15 @@ export const EditorDashboard = ({ user, onLogout }) => {
                         <Users className="h-6 w-6 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-semibold text-white">{project.name}</h3>
+                        <h3 className="text-xl font-semibold text-white">
+                          {project.name}
+                        </h3>
                         <p className="text-gray-400 text-sm">
                           Creator: {project.creator_id.email}
                         </p>
                         <p className="text-gray-500 text-xs">
-                          Assigned {new Date(project.created_at).toLocaleDateString()}
+                          Assigned{" "}
+                          {new Date(project.created_at).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
@@ -157,7 +173,6 @@ export const EditorDashboard = ({ user, onLogout }) => {
                         <p className="text-sm text-gray-400">
                           {projectVideos[project._id]?.length || 0} videos
                         </p>
-
                       </div>
                       {expandedProject === project._id ? (
                         <ChevronUp className="h-5 w-5 text-gray-400" />
@@ -168,7 +183,6 @@ export const EditorDashboard = ({ user, onLogout }) => {
                   </div>
                 </div>
 
-
                 {/* Expanded Content */}
                 {expandedProject === project._id && (
                   <div className="border-t border-gray-700/50 bg-gray-900/30">
@@ -177,11 +191,14 @@ export const EditorDashboard = ({ user, onLogout }) => {
                         <Play className="h-5 w-5 text-blue-400" />
                         Videos to Edit
                       </h4>
-                      
+
                       {projectVideos[project._id]?.length > 0 ? (
                         <div className="space-y-4">
                           {projectVideos[project._id].map((video) => (
-                            <div key={video._id} className="bg-gray-800/50 border border-gray-600/50 rounded-xl p-4 hover:bg-gray-700/50 transition-all">
+                            <div
+                              key={video._id}
+                              className="bg-gray-800/50 border border-gray-600/50 rounded-xl p-4 hover:bg-gray-700/50 transition-all"
+                            >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
                                   <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
@@ -189,17 +206,21 @@ export const EditorDashboard = ({ user, onLogout }) => {
                                   </div>
                                   <div>
                                     <p className="font-medium text-white">
-                                      Video uploaded on {new Date(video.created_at).toLocaleDateString()}
+                                      Video uploaded on{" "}
+                                      {new Date(
+                                        video.created_at
+                                      ).toLocaleDateString()}
                                     </p>
                                     <p className="text-sm text-gray-400">
                                       Assigned to you for editing
                                     </p>
                                     <p className="text-xs text-gray-500 mt-1">
-                                      Uploaded by: {video.uploaded_by?.email || 'Unknown'}
+                                      Uploaded by:{" "}
+                                      {video.uploaded_by?.email || "Unknown"}
                                     </p>
                                   </div>
                                 </div>
-                                
+
                                 <div className="flex items-center gap-3">
                                   <StatusBadge status={video.status} />
                                   <button className="text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 p-3 rounded-xl transition-all group">
@@ -207,7 +228,7 @@ export const EditorDashboard = ({ user, onLogout }) => {
                                   </button>
                                 </div>
                               </div>
-                              
+
                               {/* Video Actions */}
                               <div className="mt-4 pt-4 border-t border-gray-600/30">
                                 <div className="flex items-center justify-between">
@@ -216,13 +237,30 @@ export const EditorDashboard = ({ user, onLogout }) => {
                                     <span>Ready for editing</span>
                                   </div>
                                   <div className="flex gap-2">
-                                    <button onClick={() => handlePreviewEditedVideo(video._id)} className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium transition-all">
+                                    <button
+                                      onClick={() =>
+                                        handlePreviewEditedVideo(video._id)
+                                      }
+                                      className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium transition-all cursor-pointer"
+                                    >
                                       <Edit className="h-4 w-4" />
                                       Start Editing
                                     </button>
-                                    <button className="bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium transition-all">
-                                      <Video className="h-4 w-4" />
-                                      Preview
+                                    <button>
+                                      {video.s3_key && (
+                                        <a
+                                          href={video.s3_key}
+                                          // className="text-green-600 hover:text-green-800 p-2"
+                                          title="Preview Video"
+                                        >
+                                          {/* <div className="flex "> */}
+                                    <button className="bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 hover:text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 font-medium transition-all cursor-pointer">
+                                          <Video className="h-4 w-4" />
+                                          Preview
+                                    </button>
+                                          {/* </div> */}
+                                        </a>
+                                      )}
                                     </button>
                                   </div>
                                 </div>
@@ -234,7 +272,9 @@ export const EditorDashboard = ({ user, onLogout }) => {
                         <div className="text-center py-8">
                           <Play className="h-12 w-12 text-gray-600 mx-auto mb-3" />
                           <p className="text-gray-400">No videos to edit yet</p>
-                          <p className="text-gray-500 text-sm">Videos will appear here when uploaded by the creator</p>
+                          <p className="text-gray-500 text-sm">
+                            Videos will appear here when uploaded by the creator
+                          </p>
                         </div>
                       )}
                     </div>
@@ -242,7 +282,6 @@ export const EditorDashboard = ({ user, onLogout }) => {
                 )}
               </div>
             ))}
-
           </div>
         )}
       </div>
