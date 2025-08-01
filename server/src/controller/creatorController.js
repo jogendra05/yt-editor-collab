@@ -464,19 +464,20 @@ export const uploadToYouTube = async (req, res) => {
 
 
 // Clodinary Sign to frontend
-// export const cloudinarySign = (req, res) => {
-//   const timestamp = Math.round(Date.now() / 1000);
-//   const signature = cloudinary.utils.api_sign_request(
-//     { timestamp },
-//     process.env.CLOUDINARY_API_SECRET
-//   );
-//   res.json({
-//     timestamp,
-//     signature,
-//     apiKey: process.env.CLOUDINARY_API_KEY,
-//     cloudName: process.env.CLOUDINARY_CLOUD_NAME
-//   });
-// }
+export const getCloudinarySignature = (req, res) => {
+  const timestamp = Math.round(Date.now() / 1000);
+  const signature = cloudinary.utils.api_sign_request(
+    { timestamp, folder: 'yt-editor' }, // you can add more params if needed
+    process.env.CLOUDINARY_API_SECRET
+  );
+  res.json({
+    timestamp,
+    signature,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    folder: 'yt-editor'
+  });
+};
 
 // // Signed upload to cloudinary
 // export const signedDataUpdate = async (req, res) => {
@@ -517,6 +518,7 @@ export const uploadToYouTube = async (req, res) => {
 
 // GET /api/videos/:videoId - Load video details
 export const loadVideoDetails = async (req, res) => {
+  console.log("Heeeeee")
   try {
     const { videoId } = req.params;
 
@@ -547,7 +549,7 @@ export const loadVideoDetails = async (req, res) => {
         message: "Video not found" 
       });
     }
-
+    console.log("2")
     // Transform the video data to match frontend expectations
     const videoResponse = {
       _id: video._id,
@@ -593,7 +595,7 @@ export const loadVideoDetails = async (req, res) => {
       // Tags (if you want to add tags functionality)
       tags: video.tags || []
     };
-
+    console.log("hoooo")
     res.status(200).json({
       success: true,
       video: videoResponse
@@ -618,7 +620,9 @@ export const updateVideoDetails = async (req, res) => {
       description, 
       tags, 
       youtube_visibility, 
-      youtube_madeForKids 
+      youtube_madeForKids,
+      edited_video_url,
+      thumbnail_url
     } = req.body;
 
     const video = await Video.findById(videoId);
@@ -646,7 +650,9 @@ export const updateVideoDetails = async (req, res) => {
     if (tags !== undefined) updateData.tags = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
     if (youtube_visibility !== undefined) updateData.youtube_visibility = youtube_visibility;
     if (youtube_madeForKids !== undefined) updateData.youtube_madeForKids = youtube_madeForKids;
-
+    if (edited_video_url !== undefined) updateData.edited_s3_key = edited_video_url;
+    if (thumbnail_url !== undefined) updateData.youtube_thumbnail_url = thumbnail_url;
+    
     const updatedVideo = await Video.findByIdAndUpdate(
       videoId, 
       updateData,

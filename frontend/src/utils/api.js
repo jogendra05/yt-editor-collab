@@ -99,6 +99,27 @@ const requestVideoChanges = async (videoId, feedback) => {
   });
 };
 
+const getCloudinarySignature = async () => {
+  return await request('/api/cloudinary-signature');
+};
+
+async function uploadToCloudinary(file, signatureData) {
+  const url = `https://api.cloudinary.com/v1_1/${signatureData.cloudName}/video/upload`;
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('api_key', signatureData.apiKey);
+  formData.append('timestamp', signatureData.timestamp);
+  formData.append('signature', signatureData.signature);
+  formData.append('folder', signatureData.folder);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw new Error('Cloudinary upload failed');
+  return await res.json();
+}
+
 export default {
   request,
   refreshToken,
@@ -114,4 +135,6 @@ export default {
   getVideoDetails,
   updateVideoDetails,
   requestVideoChanges,
+  getCloudinarySignature,
+  uploadToCloudinary,
 };
