@@ -68,6 +68,7 @@ const videoSchema = new mongoose.Schema({
 
   edited_s3_key: { type: String },                  // Cloudinary URL or S3 key
   edited_cloudinary_public_id: { type: String },
+  edited_thumbnail_public_id: { type: String },
   edited_at: { type: Date },
   created_at: { type: Date, default: Date.now },
   //additional feilds
