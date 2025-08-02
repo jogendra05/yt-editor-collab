@@ -78,8 +78,8 @@ const uploadToYouTube = async (videoId, title, description) => {
     method: 'POST',
     body: JSON.stringify({
       videoId,
-      title: title || 'Untitled Video',
-      description: description || 'Uploaded via YT Editor Hub'
+      // title: title || 'Untitled Video',
+      // description: description || 'Uploaded via YT Editor Hub'
     }),
   });
 };

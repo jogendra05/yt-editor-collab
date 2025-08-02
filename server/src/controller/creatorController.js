@@ -390,15 +390,16 @@ export const uploadToYouTube = async (req, res) => {
     const videoStream = Readable.from(Buffer.from(videoBuffer));
 
     // Prepare video metadata
-    const videoTitle = title || `${video.project_id.name}`;
-    const videoDescription = description;
+    const videoTitle = video.youtube_title || video.project_id?.name || 'Untitled Video';
+    const videoDescription = video.youtube_description || '';
+    const videoTags = Array.isArray(video.tags) && video.tags.length > 0
+      ? video.tags
+      : ['youtube', 'editor', 'collaboration'];
     const statusMetadata = {
       privacyStatus: privacyStatus || 'public', // 'public' | 'unlisted' | 'private'
       selfDeclaredMadeForKids: madeForKids === 'true' || madeForKids === true
     };
 
-    // Include video tags if available
-    const videoTags = ['youtube', 'editor', 'collaboration'];
     if (video.tags && video.tags.length > 0) {
       videoTags.push(...video.tags);
     }
@@ -423,9 +424,9 @@ export const uploadToYouTube = async (req, res) => {
     const youtubeVideoId = uploadResponse.data.id;
 
     // Optionally set custom thumbnail if provided
-    if (thumbnailUrl) {
+    if (video.youtube_thumbnail_url) {
       // Download thumbnail image
-      const thumbResp = await fetch(thumbnailUrl);
+      const thumbResp = await fetch(video.youtube_thumbnail_url);
       if (thumbResp.ok) {
         const thumbBuffer = await thumbResp.arrayBuffer();
         const thumbStream = Readable.from(Buffer.from(thumbBuffer));
