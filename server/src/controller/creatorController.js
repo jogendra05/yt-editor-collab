@@ -1,10 +1,7 @@
 import { google } from "googleapis";
 import { Video, Project, User, Invite } from "../models/schema.js";
-import fs from "fs";
-import path from "path";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
 import { v2 as cloudinary } from 'cloudinary';
-import {notifyOnUpload} from "../utils/sendEmail.js";
 import { uploadToCloudinary } from "../middleware/cloudinaryUpload.js";
 import { COOKIE_OPTIONS } from "../utils/cookie.js";
 
@@ -141,9 +138,10 @@ export const getUserInfo = async (req, res) => {
 
 export const createProject = async (req, res) => {
   try {
-    const { name, editorEmail } = req.body;
-    if (!name || !editorEmail || !req.file) {
-      return res.status(400).json({ error: "name, editorEmail and video are required" });
+    const { name, editorEmail, video_url } = req.body;
+    
+    if (!name || !editorEmail || !video_url) {
+      return res.status(400).json({ error: "name, editorEmail and video_url are required" });
     }
 
     // Create the project
@@ -165,43 +163,39 @@ export const createProject = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Save the video
-    // const video = await Video.create({
-    //   project_id: project._id,
-    //   uploaded_by: req.userId,
-    //   assigned_to: editor._id,
-    //   s3_key: req.file.path, // Cloudinary URL
-    //   status: "pending"
-    // });
+    // Extract cloudinary public_id from video URL
+    const matchVideo = video_url.match(/\/(youtube-editor-videos\/[^^/.]+)\.[a-zA-Z0-9]+$/);
+    const cloudinary_public_id = matchVideo ? matchVideo[1] : null;
 
-
-    // Upload to Cloudinary manually
-    const cloudinaryResult = await uploadToCloudinary(req.file.buffer, req.file.originalname);
-
-    // Save the video
+    // Save the video with Cloudinary URL
     const video = await Video.create({
       project_id: project._id,
       uploaded_by: req.userId,
       assigned_to: editor._id,
-      s3_key: cloudinaryResult.secure_url, // cloudinary URL
-      status: "pending"
+      s3_key: video_url, // Cloudinary URL from frontend
+      cloudinary_public_id: cloudinary_public_id,
+      status: "pending",
+      // You can add other fields here if needed:
+      // file_size: req.body.file_size,
+      // duration: req.body.duration,
+      // format: req.body.format || "MP4",
+      // resolution: req.body.resolution || "1080p",
     });
-    // notifyOnUpload({
-    //   creatorEmail: req.user.email,
-    //   editorEmail:  editor.email,
-    //   videoUrl:     "google.com",
-    //   by:           'creator'
-    // }, res);
 
     res.status(201).json({
-      message: "Project, invite, and video created",
+      success: true,
+      message: "Project, invite, and video created successfully",
       project,
       editor: { email: editor.email },
       video
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to create project with video" });
+    console.error('Error creating project:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: "Failed to create project with video",
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
@@ -303,7 +297,6 @@ export const editorProjects = async (req, res) => {
   }
 };
 
-
 export const editorAcceptInvite = async (req, res) => {
   try {
     const { inviteId } = req.body;
@@ -354,9 +347,9 @@ export const uploadToYouTube = async (req, res) => {
       return res.status(403).json({ error: "Only project creator can upload videos to YouTube" });
     }
 
-    // Verify video is approved
-    if (video.status !== 'approved') {
-      return res.status(400).json({ error: "Video must be approved before uploading to YouTube" });
+    // Verify video is approved or completed
+    if (video.status !== 'approved' && video.status !== 'completed') {
+      return res.status(400).json({ error: "Video must be approved or completed before uploading to YouTube" });
     }
 
     // Check if already uploaded
@@ -386,20 +379,29 @@ export const uploadToYouTube = async (req, res) => {
 
     const youtube = google.youtube({ version: "v3", auth: oauth2Client });
 
-    // Download video from Cloudinary
-    const videoResponse = await fetch(video.s3_key);
+    // Use edited video if available, otherwise use original
+    const videoUrl = video.edited_s3_key || video.s3_key;
+    
+    // Download video from Cloudinary/S3
+    const videoResponse = await fetch(videoUrl);
     if (!videoResponse.ok) throw new Error(`Failed to fetch video: ${videoResponse.status}`);
     const videoBuffer = await videoResponse.arrayBuffer();
     const { Readable } = await import('stream');
     const videoStream = Readable.from(Buffer.from(videoBuffer));
 
     // Prepare video metadata
-    const videoTitle = title || `${video.project_id.name} - Final Version`;
-    const videoDescription = description || `Video for project: ${video.project_id.name}\n\nCreated with YT Editor Hub.`;
+    const videoTitle = title || `${video.project_id.name}`;
+    const videoDescription = description;
     const statusMetadata = {
-      privacyStatus: privacyStatus || 'private', // 'public' | 'unlisted' | 'private'
+      privacyStatus: privacyStatus || 'public', // 'public' | 'unlisted' | 'private'
       selfDeclaredMadeForKids: madeForKids === 'true' || madeForKids === true
     };
+
+    // Include video tags if available
+    const videoTags = ['youtube', 'editor', 'collaboration'];
+    if (video.tags && video.tags.length > 0) {
+      videoTags.push(...video.tags);
+    }
 
     // Upload to YouTube
     const uploadResponse = await youtube.videos.insert({
@@ -408,7 +410,7 @@ export const uploadToYouTube = async (req, res) => {
         snippet: {
           title: videoTitle,
           description: videoDescription,
-          tags: ['youtube', 'editor', 'collaboration'],
+          tags: videoTags,
           categoryId: '22',
           defaultLanguage: 'en',
           defaultAudioLanguage: 'en'
@@ -434,7 +436,7 @@ export const uploadToYouTube = async (req, res) => {
       }
     }
 
-    // Update local record
+    // Update local record with new schema fields
     video.youtube_video_id = youtubeVideoId;
     video.youtube_title = videoTitle;
     video.youtube_description = videoDescription;
@@ -442,6 +444,12 @@ export const uploadToYouTube = async (req, res) => {
     video.youtube_upload_date = new Date();
     video.youtube_visibility = statusMetadata.privacyStatus;
     video.youtube_madeForKids = statusMetadata.selfDeclaredMadeForKids;
+    
+    // Store thumbnail URL if provided
+    if (thumbnailUrl) {
+      video.youtube_thumbnail_url = thumbnailUrl;
+    }
+    
     await video.save();
 
     res.status(200).json({ 
@@ -462,7 +470,6 @@ export const uploadToYouTube = async (req, res) => {
   }
 };
 
-
 // Clodinary Sign to frontend
 export const getCloudinarySignature = (req, res) => {
   const timestamp = Math.round(Date.now() / 1000);
@@ -478,43 +485,6 @@ export const getCloudinarySignature = (req, res) => {
     folder: 'youtube-editor-videos'
   });
 };
-
-// // Signed upload to cloudinary
-// export const signedDataUpdate = async (req, res) => {
-//   try {
-//     const { project_id, assigned_to, public_id, url, thumbnail_url } = req.body;
-
-//     const video = new Video({
-//       project_id,
-//       uploaded_by: req.user._id,
-//       assigned_to,
-//       s3_key: url,
-//       cloudinary_public_id: public_id,
-//       youtube_thumbnail_url: thumbnail_url,
-//       status: "Completed"
-//     });
-
-//     const project = await Project.findById(project_id).populate("creator_id", "email");
-
-//     if (!project) {
-//       console.error(`Project not found: ${project_id}`);
-//       return res.status(201).json(video);
-//     }
-
-//     await video.save();
-//     // notifyOnUpload({
-//     //   creatorEmail: project.creator_id.email,
-//     //   editorEmail:  req.user.email,
-//     //   videoUrl:     "google.com",
-//     //   by:           'editor'
-//     // }, res);
-
-//     res.status(201).json(video);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Server error" });
-//   }
-// };
 
 // GET /api/videos/:videoId - Load video details
 export const loadVideoDetails = async (req, res) => {
@@ -620,6 +590,7 @@ export const updateVideoDetails = async (req, res) => {
       youtube_madeForKids,
       edited_video_url,
       thumbnail_url,
+      status,
     } = req.body;
 
     // Fetch existing video
@@ -673,6 +644,7 @@ export const updateVideoDetails = async (req, res) => {
       updateData.youtube_visibility = youtube_visibility;
     if (youtube_madeForKids !== undefined)
       updateData.youtube_madeForKids = youtube_madeForKids;
+    if (status !== undefined) updateData.status = status; 
 
     // --- Handle new edited video URL & public ID (including folder) ---
     if (edited_video_url !== undefined) {
@@ -717,7 +689,6 @@ export const updateVideoDetails = async (req, res) => {
     });
   }
 };
-
 
 // POST /api/videos/:videoId/request-changes - Request changes to video
 export const requestVideoChanges = async (req, res) => {
@@ -766,3 +737,41 @@ export const requestVideoChanges = async (req, res) => {
     });
   }
 };
+
+
+// // Signed upload to cloudinary
+// export const signedDataUpdate = async (req, res) => {
+//   try {
+//     const { project_id, assigned_to, public_id, url, thumbnail_url } = req.body;
+
+//     const video = new Video({
+//       project_id,
+//       uploaded_by: req.user._id,
+//       assigned_to,
+//       s3_key: url,
+//       cloudinary_public_id: public_id,
+//       youtube_thumbnail_url: thumbnail_url,
+//       status: "Completed"
+//     });
+
+//     const project = await Project.findById(project_id).populate("creator_id", "email");
+
+//     if (!project) {
+//       console.error(`Project not found: ${project_id}`);
+//       return res.status(201).json(video);
+//     }
+
+//     await video.save();
+//     // notifyOnUpload({
+//     //   creatorEmail: project.creator_id.email,
+//     //   editorEmail:  req.user.email,
+//     //   videoUrl:     "google.com",
+//     //   by:           'editor'
+//     // }, res);
+
+//     res.status(201).json(video);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };

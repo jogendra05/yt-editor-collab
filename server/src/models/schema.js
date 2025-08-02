@@ -49,7 +49,7 @@ const videoSchema = new mongoose.Schema({
   cloudinary_public_id: String,
   status: {
     type: String,
-    enum: ["pending", "approved", "changes_requested", "Completed"],
+    enum: ["pending", "approved", "changes_requested", "completed"],
     default: "pending"
   },
   // YouTube-related fields
@@ -61,7 +61,7 @@ const videoSchema = new mongoose.Schema({
   youtube_visibility: {                              
     type: String,
     enum: ["public", "unlisted", "private"],
-    default: "private"
+    default: "public"
   }, // Visibility status on YouTube
   youtube_madeForKids: { type: Boolean, default: false }, 
   youtube_thumbnail_url: { type: String },           // Custom thumbnail URL if set

@@ -35,7 +35,6 @@ creatorRouter.put("/videos/:videoId/approve", authMiddleware, approveVideo);
 creatorRouter.get("/editor/projects", authMiddleware, editorProjects);
 creatorRouter.post("/invite/accept", authMiddleware, editorAcceptInvite);
 creatorRouter.post("/videos/upload-to-youtube", authMiddleware, uploadToYouTube);
-
 creatorRouter.get("/cloudinary-signature", authMiddleware, getCloudinarySignature);
 // creatorRouter.post("/signed-data", authMiddleware, signedDataUpdate);
 // Video management routes

@@ -9,6 +9,7 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
     video: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.editorEmail || !formData.video) {
@@ -17,21 +18,38 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
     }
     
     setIsSubmitting(true);
+    setUploadProgress('Getting upload signature...');
 
     try {
-      const data = new FormData();
-      data.append('name', formData.name);
-      data.append('editorEmail', formData.editorEmail);
-      data.append('video', formData.video);
-      console.log('Submitting project data:', data);
+      // 1. Get Cloudinary signature from backend
+      const signatureData = await api.getCloudinarySignature();
       
-      const result = await api.createProject(data);
-      console.log(result)
-      console.log(result.project)
-      onSuccess(result.project);
+      // 2. Upload video directly to Cloudinary
+      setUploadProgress('Uploading video to Cloudinary...');
+      const videoUploadRes = await api.uploadToCloudinary(formData.video, signatureData);
+      
+      // 3. Create project with video URL
+      setUploadProgress('Creating project...');
+      const projectData = {
+        name: formData.name,
+        editorEmail: formData.editorEmail,
+        video_url: videoUploadRes.secure_url
+      };
+      
+      const result = await api.createProject(projectData);
+      console.log('Project created:', result);
+      
+      setUploadProgress('Project created successfully! 🎉');
+      
+      // Small delay to show success message
+      setTimeout(() => {
+        onSuccess(result.project);
+      }, 1000);
+      
     } catch (error) {
       console.error('Failed to create project:', error);
-      alert('Failed to create project. Please try again.');
+      alert(`Failed to create project: ${error.message}`);
+      setUploadProgress('');
     } finally {
       setIsSubmitting(false);
     }
@@ -52,6 +70,7 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-gray-400 hover:text-white transition-all duration-300 p-2 hover:bg-gray-700/50 rounded-full hover:rotate-90 hover:scale-110 group"
+            disabled={isSubmitting}
           >
             <X className="h-5 w-5 group-hover:drop-shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
           </button>
@@ -80,6 +99,7 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-white placeholder-gray-400 transition-all duration-300 hover:bg-gray-800/70 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:border-gray-500"
                 placeholder="Enter project name"
+                disabled={isSubmitting}
               />
             </div>
             
@@ -95,6 +115,7 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
                 onChange={(e) => setFormData({ ...formData, editorEmail: e.target.value })}
                 className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-white placeholder-gray-400 transition-all duration-300 hover:bg-gray-800/70 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:border-gray-500"
                 placeholder="editor@example.com"
+                disabled={isSubmitting}
               />
             </div>
             
@@ -110,9 +131,25 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
                   accept="video/*"
                   onChange={(e) => setFormData({ ...formData, video: e.target.files[0] })}
                   className="w-full px-4 py-3 bg-gray-800/50 border border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 transition-all duration-300 hover:bg-gray-800/70 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:border-gray-500"
+                  disabled={isSubmitting}
                 />
+                {formData.video && (
+                  <div className="mt-2 text-sm text-gray-400">
+                    Selected: {formData.video.name} ({(formData.video.size / 1024 / 1024).toFixed(2)} MB)
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Upload Progress */}
+            {uploadProgress && (
+              <div className="bg-gray-800/50 border border-gray-600 rounded-xl p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-gray-300 text-sm">{uploadProgress}</span>
+                </div>
+              </div>
+            )}
             
             <div className="flex justify-end gap-3 pt-6">
               <button
@@ -139,4 +176,4 @@ export const CreateProjectModal = ({ onClose, onSuccess }) => {
       </div>
     </div>
   );
-}
+};

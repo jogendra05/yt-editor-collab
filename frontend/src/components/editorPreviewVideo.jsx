@@ -117,13 +117,17 @@ const EditorUploadPage = ({ videoId, onBack, user }) => {
       }
 
       // 4) Update video details in your DB
-      await api.updateVideoDetails(videoId, {
-        title: formData.title,
-        description: formData.description,
-        tags: formData.tags.split(',').map((t) => t.trim()).filter((t) => t),
-        edited_video_url: editedVideoUrl,
-        thumbnail_url: thumbnailUrl,
-      });
+      if (thumbnailUrl || editedVideoUrl) {
+        await api.updateVideoDetails(videoId, {
+          title: formData.title,
+          description: formData.description,
+          tags: formData.tags.split(',').map((t) => t.trim()).filter((t) => t),
+          edited_video_url: editedVideoUrl,
+          thumbnail_url: thumbnailUrl,
+          status: "completed"  // Add status here
+        });
+      }
+      
 
       // 5) Refresh video state
       const { video: updated } = await api.getVideoDetails(videoId);
