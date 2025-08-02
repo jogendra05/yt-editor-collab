@@ -70,7 +70,7 @@ export const creatorCallback = async (req, res) => {
     res
       .cookie("yt_access",  accessToken,  { ...COOKIE_OPTIONS, maxAge: 15 * 60 * 1000 })
       .cookie("yt_refresh", refreshToken, { ...COOKIE_OPTIONS, maxAge: 7 * 24 * 60 * 60 * 1000 })
-      .redirect(`http://localhost:5173`);
+      .redirect(`https://yt-editor-hub.onrender.com`);
   } catch (error) {
     console.error("Error during OAuth callback:", error);
     res.status(500).send("Authentication failed. Please try again.");
