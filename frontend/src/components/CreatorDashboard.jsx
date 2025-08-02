@@ -69,8 +69,8 @@ export const CreatorDashboard = ({ user, onLogout }) => {
       setUploadingVideoId(video._id);
       
       const projectName = projects.find(p => p._id === video.project_id)?.name || 'Project Video';
-      const title = `${projectName} - Final Version`;
-      const description = `Video edited and approved for ${projectName}. Uploaded via YT Editor Hub.`;
+      const title = `${projectName}`;
+      const description = ` ${projectName}`;
       
       const result = await api.uploadToYouTube(video._id, title, description);
       
