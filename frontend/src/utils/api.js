@@ -40,10 +40,13 @@ const getUserInfo = async () => {
   return await request('/api/me');
 };
 
-const createProject = async (formData) => {
+const createProject = async (projectData) => {
+  // If it's an object (not FormData), stringify it
+  const body = projectData instanceof FormData ? projectData : JSON.stringify(projectData);
+  
   return await request('/api/projects', {
     method: 'POST',
-    body: formData, // leave as FormData
+    body: body,
   });
 };
 

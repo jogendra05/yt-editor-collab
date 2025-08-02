@@ -21,6 +21,12 @@ export const StatusBadge = ({ status }) => {
       text: '❌ Changes Requested',
       iconColor: 'text-red-400 animate-bounce'
     },
+    completed: {
+      icon: CheckCircle,
+      color: 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-200 border border-blue-500/30 hover:border-blue-400/50 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)]',
+      text: '🎉 Completed',
+      iconColor: 'text-blue-400 animate-bounce'
+    },
   };
 
   const config = configs[status] || configs.pending;

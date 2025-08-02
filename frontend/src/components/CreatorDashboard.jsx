@@ -87,7 +87,7 @@ export const CreatorDashboard = ({ user, onLogout }) => {
       setUploadingVideoId(null);
     }
   };
-  
+    
   // New functions for video preview
   const handlePreviewEditedVideo = (videoId) => {
     setSelectedVideoId(videoId);
