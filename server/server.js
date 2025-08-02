@@ -11,7 +11,7 @@ import cookieParser from "cookie-parser";
 const app = express();
 
 app.use(cors({
-  origin: ['http://localhost:5173'], // Add Vite port
+  origin: ['http://localhost:5173', "https://yt-editor-api.onrender.com"], // Add Vite port
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
